@@ -102,14 +102,14 @@ for root, dirs, filenames in os.walk(args.path):
                 before = NOT_RE.sub(r'\1', match[2]).rstrip()
                 text = re.sub(
                     re.escape(match[0]),
-                    '%s %s is not %s' % (match[1], before, test_name,),
-                    text
+                    f'{match[1]} {before} is not {test_name}',
+                    text,
                 )
             else:
                 text = re.sub(
                     re.escape(match[0]),
-                    '%s %s is %s' % (match[1], match[2].rstrip(), test_name,),
-                    text
+                    f'{match[1]} {match[2].rstrip()} is {test_name}',
+                    text,
                 )
 
         with open(path, 'w+') as f:

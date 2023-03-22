@@ -61,7 +61,7 @@ def discover_interpreter(action, interpreter_name, discovery_mode, task_vars):
         display.vvv(msg=u"Attempting {0} interpreter discovery".format(interpreter_name), host=host)
 
         # not all command -v impls accept a list of commands, so we have to call it once per python
-        command_list = ["command -v '%s'" % py for py in bootstrap_python_list]
+        command_list = [f"command -v '{py}'" for py in bootstrap_python_list]
         shell_bootstrap = "echo PLATFORM; uname; echo FOUND; {0}; echo ENDFOUND".format('; '.join(command_list))
 
         # FUTURE: in most cases we probably don't want to use become, but maybe sometimes we do?
@@ -114,27 +114,31 @@ def discover_interpreter(action, interpreter_name, discovery_mode, task_vars):
         platform_interpreter = to_text(_version_fuzzy_match(version, version_map), errors='surrogate_or_strict')
 
         # provide a transition period for hosts that were using /usr/bin/python previously (but shouldn't have been)
-        if is_auto_legacy:
-            if platform_interpreter != u'/usr/bin/python' and u'/usr/bin/python' in found_interpreters:
-                # FIXME: support comments in sivel's deprecation scanner so we can get reminded on this
-                if not is_silent:
-                    action._discovery_deprecation_warnings.append(dict(
-                        msg=u"Distribution {0} {1} on host {2} should use {3}, but is using "
-                            u"/usr/bin/python for backward compatibility with prior Ansible releases. "
-                            u"A future Ansible release will default to using the discovered platform "
-                            u"python for this host. See {4} for more information"
-                            .format(distro, version, host, platform_interpreter,
-                                    get_versioned_doclink('reference_appendices/interpreter_discovery.html')),
-                        version='2.12'))
-                return u'/usr/bin/python'
+        if (
+            is_auto_legacy
+            and platform_interpreter != u'/usr/bin/python'
+            and u'/usr/bin/python' in found_interpreters
+        ):
+            # FIXME: support comments in sivel's deprecation scanner so we can get reminded on this
+            if not is_silent:
+                action._discovery_deprecation_warnings.append(dict(
+                    msg=u"Distribution {0} {1} on host {2} should use {3}, but is using "
+                        u"/usr/bin/python for backward compatibility with prior Ansible releases. "
+                        u"A future Ansible release will default to using the discovered platform "
+                        u"python for this host. See {4} for more information"
+                        .format(distro, version, host, platform_interpreter,
+                                get_versioned_doclink('reference_appendices/interpreter_discovery.html')),
+                    version='2.12'))
+            return u'/usr/bin/python'
 
         if platform_interpreter not in found_interpreters:
-            if platform_interpreter not in bootstrap_python_list:
-                # sanity check to make sure we looked for it
-                if not is_silent:
-                    action._discovery_warnings \
-                        .append(u"Platform interpreter {0} on host {1} is missing from bootstrap list"
-                                .format(platform_interpreter, host))
+            if (
+                platform_interpreter not in bootstrap_python_list
+                and not is_silent
+            ):
+                action._discovery_warnings \
+                    .append(u"Platform interpreter {0} on host {1} is missing from bootstrap list"
+                            .format(platform_interpreter, host))
 
             if not is_silent:
                 action._discovery_warnings \
@@ -182,9 +186,7 @@ def _get_linux_distro(platform_info):
 
 
 def _version_fuzzy_match(version, version_map):
-    # try exact match first
-    res = version_map.get(version)
-    if res:
+    if res := version_map.get(version):
         return res
 
     sorted_looseversions = sorted([LooseVersion(v) for v in version_map.keys()])

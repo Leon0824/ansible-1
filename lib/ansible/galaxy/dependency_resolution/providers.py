@@ -45,7 +45,7 @@ class CollectionDependencyProvider(AbstractProvider):
             with_deps=True,  # type: bool
             with_pre_releases=False,  # type: bool
             upgrade=False,  # type: bool
-    ):  # type: (...) -> None
+    ):    # type: (...) -> None
         r"""Initialize helper attributes.
 
         :param api: An instance of the multiple Galaxy APIs wrapper.
@@ -66,14 +66,12 @@ class CollectionDependencyProvider(AbstractProvider):
             Requirement.from_requirement_dict,
             art_mgr=concrete_artifacts_manager,
         )
-        self._pinned_candidate_requests = set(
+        self._pinned_candidate_requests = {
             Candidate(req.fqcn, req.ver, req.src, req.type)
             for req in (user_requirements or ())
-            if req.is_concrete_artifact or (
-                req.ver != '*' and
-                not req.ver.startswith(('<', '>', '!='))
-            )
-        )
+            if req.is_concrete_artifact
+            or (req.ver != '*' and not req.ver.startswith(('<', '>', '!=')))
+        }
         self._preferred_candidates = set(preferred_candidates or ())
         self._with_deps = with_deps
         self._with_pre_releases = with_pre_releases

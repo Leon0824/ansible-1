@@ -112,8 +112,7 @@ def generate_porting_guide(version):
     version_list[-1] = str(int(version_list[-1]) - 1)
     previous_version = '.'.join(version_list)
 
-    content = template.render(ver=version, prev_ver=previous_version)
-    return content
+    return template.render(ver=version, prev_ver=previous_version)
 
 
 def write_guide(version, guide_content):

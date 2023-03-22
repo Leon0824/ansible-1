@@ -321,15 +321,11 @@ def parse_scm(collection, version):
     elif version == '*' or not version:
         version = 'HEAD'
 
-    if collection.startswith('git+'):
-        path = collection[4:]
-    else:
-        path = collection
-
+    path = collection[4:] if collection.startswith('git+') else collection
     path, fragment = urldefrag(path)
     fragment = fragment.strip(os.path.sep)
 
-    if path.endswith(os.path.sep + '.git'):
+    if path.endswith(f'{os.path.sep}.git'):
         name = path.split(os.path.sep)[-2]
     elif '://' not in path and '@' not in path:
         name = path
@@ -398,7 +394,7 @@ def _download_file(url, b_path, expected_hash, validate_certs, token=None):
 
     b_file_path = os.path.join(b_tarball_dir, b_tarball_name)
 
-    display.display("Downloading %s to %s" % (url, to_text(b_tarball_dir)))
+    display.display(f"Downloading {url} to {to_text(b_tarball_dir)}")
     # NOTE: Galaxy redirects downloads to S3 which rejects the request
     # NOTE: if an Authorization header is attached so don't redirect it
     resp = open_url(
@@ -427,14 +423,11 @@ def _consume_file(read_from, write_to=None):
     # type: (BinaryIO, BinaryIO) -> str
     bufsize = 65536
     sha256_digest = sha256()
-    data = read_from.read(bufsize)
-    while data:
+    while data := read_from.read(bufsize):
         if write_to is not None:
             write_to.write(data)
             write_to.flush()
         sha256_digest.update(data)
-        data = read_from.read(bufsize)
-
     return sha256_digest.hexdigest()
 
 
@@ -467,15 +460,15 @@ def _normalize_galaxy_yml_manifest(
     all_keys = frozenset(list(mandatory_keys) + list(string_keys) + list(list_keys) + list(dict_keys))
 
     set_keys = set(galaxy_yml.keys())
-    missing_keys = mandatory_keys.difference(set_keys)
-    if missing_keys:
-        raise AnsibleError("The collection galaxy.yml at '%s' is missing the following mandatory keys: %s"
-                           % (to_native(b_galaxy_yml_path), ", ".join(sorted(missing_keys))))
+    if missing_keys := mandatory_keys.difference(set_keys):
+        raise AnsibleError(
+            f"""The collection galaxy.yml at '{to_native(b_galaxy_yml_path)}' is missing the following mandatory keys: {", ".join(sorted(missing_keys))}"""
+        )
 
-    extra_keys = set_keys.difference(all_keys)
-    if len(extra_keys) > 0:
-        display.warning("Found unknown keys in collection galaxy.yml at '%s': %s"
-                        % (to_text(b_galaxy_yml_path), ", ".join(extra_keys)))
+    if extra_keys := set_keys.difference(all_keys):
+        display.warning(
+            f"""Found unknown keys in collection galaxy.yml at '{to_text(b_galaxy_yml_path)}': {", ".join(extra_keys)}"""
+        )
 
     # Add the defaults if they have not been set
     for optional_string in string_keys:
@@ -581,8 +574,9 @@ def _get_meta_from_installed_dir(
     manifest = _get_json_from_installed_dir(b_path, MANIFEST_FILENAME)
     collection_info = manifest['collection_info']
 
-    version = collection_info.get('version')
-    if not version:
+    if version := collection_info.get('version'):
+        return collection_info
+    else:
         raise AnsibleError(
             u'Collection metadata file `{manifest_filename!s}` at `{meta_file!s}` is expected '
             u'to have a valid SemVer version value but got {version!s}'.
@@ -592,8 +586,6 @@ def _get_meta_from_installed_dir(
                 version=to_text(repr(version)),
             ),
         )
-
-    return collection_info
 
 
 def _get_meta_from_tar(

@@ -142,7 +142,7 @@ class CollectionVerifyResult:
 def verify_local_collection(
         local_collection, remote_collection,
         artifacts_manager,
-):  # type: (Candidate, Optional[Candidate], ConcreteArtifactsManager) -> CollectionVerifyResult
+):    # type: (Candidate, Optional[Candidate], ConcreteArtifactsManager) -> CollectionVerifyResult
     """Verify integrity of the locally installed collection.
 
     :param local_collection: Collection being checked.
@@ -213,7 +213,9 @@ def verify_local_collection(
     # Use the manifest to verify the file manifest checksum
     file_manifest_data = manifest['file_manifest_file']
     file_manifest_filename = file_manifest_data['name']
-    expected_hash = file_manifest_data['chksum_%s' % file_manifest_data['chksum_type']]
+    expected_hash = file_manifest_data[
+        f"chksum_{file_manifest_data['chksum_type']}"
+    ]
 
     # Verify the file manifest before using it to verify individual files
     _verify_file_hash(b_collection_path, file_manifest_filename, expected_hash, modified_content)
@@ -222,7 +224,7 @@ def verify_local_collection(
     # Use the file manifest to verify individual file checksums
     for manifest_data in file_manifest['files']:
         if manifest_data['ftype'] == 'file':
-            expected_hash = manifest_data['chksum_%s' % manifest_data['chksum_type']]
+            expected_hash = manifest_data[f"chksum_{manifest_data['chksum_type']}"]
             _verify_file_hash(b_collection_path, manifest_data['name'], expected_hash, modified_content)
 
     if modified_content:
@@ -233,7 +235,7 @@ def verify_local_collection(
             format(fqcn=to_text(local_collection.fqcn)),
         )
         for content_change in modified_content:
-            display.display('    %s' % content_change.filename)
+            display.display(f'    {content_change.filename}')
             display.v("    Expected: %s\n    Found: %s" % (content_change.expected, content_change.installed))
     else:
         what = "are internally consistent with its manifest" if verify_local_only else "match the remote collection"
@@ -281,14 +283,20 @@ def build_collection(u_collection_path, u_output_path, force):
 
     if os.path.exists(b_collection_output):
         if os.path.isdir(b_collection_output):
-            raise AnsibleError("The output collection artifact '%s' already exists, "
-                               "but is a directory - aborting" % to_native(b_collection_output))
+            raise AnsibleError(
+                f"The output collection artifact '{to_native(b_collection_output)}' already exists, but is a directory - aborting"
+            )
         elif not force:
-            raise AnsibleError("The file '%s' already exists. You can use --force to re-create "
-                               "the collection artifact." % to_native(b_collection_output))
+            raise AnsibleError(
+                f"The file '{to_native(b_collection_output)}' already exists. You can use --force to re-create the collection artifact."
+            )
 
-    collection_output = _build_collection_tar(b_collection_path, b_collection_output, collection_manifest, file_manifest)
-    return collection_output
+    return _build_collection_tar(
+        b_collection_path,
+        b_collection_output,
+        collection_manifest,
+        file_manifest,
+    )
 
 
 def download_collections(
@@ -405,26 +413,27 @@ def publish_collection(collection_path, api, wait, timeout):
     import_uri = api.publish_collection(collection_path)
 
     if wait:
-        # Galaxy returns a url fragment which differs between v2 and v3.  The second to last entry is
-        # always the task_id, though.
-        # v2: {"task": "https://galaxy-dev.ansible.com/api/v2/collection-imports/35573/"}
-        # v3: {"task": "/api/automation-hub/v3/imports/collections/838d1308-a8f4-402c-95cb-7823f3806cd8/"}
-        task_id = None
-        for path_segment in reversed(import_uri.split('/')):
-            if path_segment:
-                task_id = path_segment
-                break
-
+        task_id = next(
+            (
+                path_segment
+                for path_segment in reversed(import_uri.split('/'))
+                if path_segment
+            ),
+            None,
+        )
         if not task_id:
-            raise AnsibleError("Publishing the collection did not return valid task info. Cannot wait for task status. Returned task info: '%s'" % import_uri)
+            raise AnsibleError(
+                f"Publishing the collection did not return valid task info. Cannot wait for task status. Returned task info: '{import_uri}'"
+            )
 
         with _display_progress(
                 "Collection has been published to the Galaxy server "
                 "{api.name!s} {api.api_server!s}".format(api=api),
         ):
             api.wait_import_task(task_id, timeout)
-        display.display("Collection has been successfully published and imported to the Galaxy server %s %s"
-                        % (api.name, api.api_server))
+        display.display(
+            f"Collection has been successfully published and imported to the Galaxy server {api.name} {api.api_server}"
+        )
     else:
         display.display("Collection has been pushed to the Galaxy server %s %s, not waiting until import has "
                         "completed due to --no-wait being set. Import task results can be found at %s"
@@ -589,7 +598,7 @@ def verify_collections(
         ignore_errors,  # type: bool
         local_verify_only,  # type: bool
         artifacts_manager,  # type: ConcreteArtifactsManager
-):  # type: (...) -> List[CollectionVerifyResult]
+):    # type: (...) -> List[CollectionVerifyResult]
     r"""Verify the integrity of locally installed collections.
 
     :param collections: The collections to check.
@@ -600,10 +609,9 @@ def verify_collections(
     :param artifacts_manager: Artifacts manager.
     :return: list of CollectionVerifyResult objects describing the results of each collection verification
     """
-    results = []  # type: List[CollectionVerifyResult]
-
     api_proxy = MultiGalaxyAPIProxy(apis, artifacts_manager)
 
+    results = []
     with _display_progress():
         for collection in collections:
             try:
@@ -617,7 +625,7 @@ def verify_collections(
                 # NOTE: Verify local collection exists before
                 # NOTE: downloading its source artifact from
                 # NOTE: a galaxy server.
-                default_err = 'Collection %s is not installed in any of the collection paths.' % collection.fqcn
+                default_err = f'Collection {collection.fqcn} is not installed in any of the collection paths.'
                 for search_path in search_paths:
                     b_search_path = to_bytes(
                         os.path.join(
@@ -629,11 +637,7 @@ def verify_collections(
                     if not os.path.isdir(b_search_path):
                         continue
                     if not _is_installed_collection_dir(b_search_path):
-                        default_err = (
-                            "Collection %s does not have a MANIFEST.json. "
-                            "A MANIFEST.json is expected if the collection has been built "
-                            "and installed via ansible-galaxy" % collection.fqcn
-                        )
+                        default_err = f"Collection {collection.fqcn} does not have a MANIFEST.json. A MANIFEST.json is expected if the collection has been built and installed via ansible-galaxy"
                         continue
 
                     local_collection = Candidate.from_dir_path(
@@ -831,15 +835,16 @@ def _build_files_manifest(b_collection_path, namespace, name, ignore_patterns):
             if os.path.isdir(b_abs_path):
                 if any(b_item == b_path for b_path in b_ignore_dirs) or \
                         any(fnmatch.fnmatch(b_rel_path, b_pattern) for b_pattern in b_ignore_patterns):
-                    display.vvv("Skipping '%s' for collection build" % to_text(b_abs_path))
+                    display.vvv(f"Skipping '{to_text(b_abs_path)}' for collection build")
                     continue
 
                 if os.path.islink(b_abs_path):
                     b_link_target = os.path.realpath(b_abs_path)
 
                     if not _is_child_path(b_link_target, b_top_level_dir):
-                        display.warning("Skipping '%s' as it is a symbolic link to a directory outside the collection"
-                                        % to_text(b_abs_path))
+                        display.warning(
+                            f"Skipping '{to_text(b_abs_path)}' as it is a symbolic link to a directory outside the collection"
+                        )
                         continue
 
                 manifest_entry = entry_template.copy()
@@ -852,7 +857,7 @@ def _build_files_manifest(b_collection_path, namespace, name, ignore_patterns):
                     _walk(b_abs_path, b_top_level_dir)
             else:
                 if any(fnmatch.fnmatch(b_rel_path, b_pattern) for b_pattern in b_ignore_patterns):
-                    display.vvv("Skipping '%s' for collection build" % to_text(b_abs_path))
+                    display.vvv(f"Skipping '{to_text(b_abs_path)}' for collection build")
                     continue
 
                 # Handling of file symlinks occur in _build_collection_tar, the manifest for a symlink is the same for
@@ -873,7 +878,7 @@ def _build_files_manifest(b_collection_path, namespace, name, ignore_patterns):
 # FIXME: accept a dict produced from `galaxy.yml` instead of separate args
 def _build_manifest(namespace, name, version, authors, readme, tags, description, license_file,
                     dependencies, repository, documentation, homepage, issues, **kwargs):
-    manifest = {
+    return {
         'collection_info': {
             'namespace': namespace,
             'name': name,
@@ -883,7 +888,8 @@ def _build_manifest(namespace, name, version, authors, readme, tags, description
             'tags': tags,
             'description': description,
             'license': kwargs['license'],
-            'license_file': license_file or None,  # Handle galaxy.yml having an empty string (None)
+            'license_file': license_file
+            or None,  # Handle galaxy.yml having an empty string (None)
             'dependencies': dependencies,
             'repository': repository,
             'documentation': documentation,
@@ -895,12 +901,10 @@ def _build_manifest(namespace, name, version, authors, readme, tags, description
             'ftype': 'file',
             'chksum_type': 'sha256',
             'chksum_sha256': None,  # Filled out in _build_collection_tar
-            'format': MANIFEST_FORMAT
+            'format': MANIFEST_FORMAT,
         },
         'format': MANIFEST_FORMAT,
     }
-
-    return manifest
 
 
 def _build_collection_tar(
@@ -908,7 +912,7 @@ def _build_collection_tar(
         b_tar_path,  # type: bytes
         collection_manifest,  # type: CollectionManifestType
         file_manifest,  # type: FilesManifestType
-):  # type: (...) -> Text
+):    # type: (...) -> Text
     """Build a tar.gz collection artifact from the manifest data."""
     files_manifest_json = to_bytes(json.dumps(file_manifest, indent=True), errors='surrogate_or_strict')
     collection_manifest['file_manifest_file']['chksum_sha256'] = secure_hash_s(files_manifest_json, hash_func=sha256)
@@ -966,10 +970,9 @@ def _build_collection_tar(
                 )
 
         shutil.copy(to_native(b_tar_filepath), to_native(b_tar_path))
-        collection_name = "%s.%s" % (collection_manifest['collection_info']['namespace'],
-                                     collection_manifest['collection_info']['name'])
+        collection_name = f"{collection_manifest['collection_info']['namespace']}.{collection_manifest['collection_info']['name']}"
         tar_path = to_text(b_tar_path)
-        display.display(u'Created collection for %s at %s' % (collection_name, tar_path))
+        display.display(f'Created collection for {collection_name} at {tar_path}')
         return tar_path
 
 
@@ -1014,8 +1017,7 @@ def _build_collection_dir(b_collection_path, b_collection_output, collection_man
             shutil.copyfile(src_file, dest_file)
 
         os.chmod(dest_file, mode)
-    collection_output = to_text(b_collection_output)
-    return collection_output
+    return to_text(b_collection_output)
 
 
 def find_existing_collections(path, artifacts_manager):
@@ -1199,15 +1201,15 @@ def _extract_tar_dir(tar, dirname, b_dest):
 
     if tar_member.type == tarfile.SYMTYPE:
         b_link_path = to_bytes(tar_member.linkname, errors='surrogate_or_strict')
-        if not _is_child_path(b_link_path, b_dest, link_name=b_dir_path):
+        if _is_child_path(b_link_path, b_dest, link_name=b_dir_path):
+            os.symlink(b_link_path, b_dir_path)
+
+        else:
             raise AnsibleError("Cannot extract symlink '%s' in collection: path points to location outside of "
                                "collection '%s'" % (to_native(dirname), b_link_path))
 
-        os.symlink(b_link_path, b_dir_path)
-
-    else:
-        if not os.path.isdir(b_dir_path):
-            os.mkdir(b_dir_path, 0o0755)
+    elif not os.path.isdir(b_dir_path):
+        os.mkdir(b_dir_path, 0o0755)
 
 
 def _extract_tar_file(tar, filename, b_dest, b_temp_path, expected_hash=None):
@@ -1260,9 +1262,9 @@ def _get_tar_file_member(tar, filename):
     try:
         member = tar.getmember(n_filename)
     except KeyError:
-        raise AnsibleError("Collection tar at '%s' does not contain the expected file '%s'." % (
-            to_native(tar.name),
-            n_filename))
+        raise AnsibleError(
+            f"Collection tar at '{to_native(tar.name)}' does not contain the expected file '{n_filename}'."
+        )
 
     return _tarfile_extract(tar, member)
 
@@ -1273,11 +1275,8 @@ def _get_json_from_tar_file(b_path, filename):
     with tarfile.open(b_path, mode='r') as collection_tar:
         with _get_tar_file_member(collection_tar, filename) as (dummy, tar_obj):
             bufsize = 65536
-            data = tar_obj.read(bufsize)
-            while data:
+            while data := tar_obj.read(bufsize):
                 file_contents += to_text(data)
-                data = tar_obj.read(bufsize)
-
     return json.loads(file_contents)
 
 

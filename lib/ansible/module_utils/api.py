@@ -39,7 +39,7 @@ def rate_limit_argument_spec(spec=None):
         rate_limit=dict(type='int'),
     ))
     if spec:
-        arg_spec.update(spec)
+        arg_spec |= spec
     return arg_spec
 
 
@@ -50,7 +50,7 @@ def retry_argument_spec(spec=None):
         retry_pause=dict(type='float', default=1),
     ))
     if spec:
-        arg_spec.update(spec)
+        arg_spec |= spec
     return arg_spec
 
 
@@ -62,7 +62,7 @@ def basic_auth_argument_spec(spec=None):
         validate_certs=dict(type='bool', default=True)
     ))
     if spec:
-        arg_spec.update(spec)
+        arg_spec |= spec
     return arg_spec
 
 
@@ -76,10 +76,7 @@ def rate_limit(rate=None, rate_limit=None):
         last = [0.0]
 
         def ratelimited(*args, **kwargs):
-            if sys.version_info >= (3, 8):
-                real_time = time.process_time
-            else:
-                real_time = time.clock
+            real_time = time.process_time if sys.version_info >= (3, 8) else time.clock
             if minrate is not None:
                 elapsed = real_time() - last[0]
                 left = minrate - elapsed
@@ -90,6 +87,7 @@ def rate_limit(rate=None, rate_limit=None):
             return ret
 
         return ratelimited
+
     return wrapper
 
 
@@ -127,7 +125,7 @@ def generate_jittered_backoff(retries=10, delay_base=3, delay_threshold=60):
     :param delay_base: The base time in seconds used to calculate the exponential backoff.
     :param delay_threshold: The maximum time in seconds for any delay.
     """
-    for retry in range(0, retries):
+    for retry in range(retries):
         yield random.randint(0, min(delay_threshold, delay_base * 2 ** retry))
 
 

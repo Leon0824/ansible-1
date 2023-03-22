@@ -34,18 +34,19 @@ def to_safe_group_name(name, replacer="_", force=False, silent=False):
 
     warn = ''
     if name:  # when deserializing we might not have name yet
-        invalid_chars = C.INVALID_VARIABLE_NAMES.findall(name)
-        if invalid_chars:
-            msg = 'invalid character(s) "%s" in group name (%s)' % (to_text(set(invalid_chars)), to_text(name))
+        if invalid_chars := C.INVALID_VARIABLE_NAMES.findall(name):
+            msg = f'invalid character(s) "{to_text(set(invalid_chars))}" in group name ({to_text(name)})'
             if C.TRANSFORM_INVALID_GROUP_CHARS not in ('never', 'ignore') or force:
                 name = C.INVALID_VARIABLE_NAMES.sub(replacer, name)
-                if not (silent or C.TRANSFORM_INVALID_GROUP_CHARS == 'silently'):
-                    display.vvvv('Replacing ' + msg)
+                if (
+                    not silent
+                    and C.TRANSFORM_INVALID_GROUP_CHARS != 'silently'
+                ):
+                    display.vvvv(f'Replacing {msg}')
                     warn = 'Invalid characters were found in group names and automatically replaced, use -vvvv to see details'
-            else:
-                if C.TRANSFORM_INVALID_GROUP_CHARS == 'never':
-                    display.vvvv('Not replacing %s' % msg)
-                    warn = 'Invalid characters were found in group names but not replaced, use -vvvv to see details'
+            elif C.TRANSFORM_INVALID_GROUP_CHARS == 'never':
+                display.vvvv(f'Not replacing {msg}')
+                warn = 'Invalid characters were found in group names but not replaced, use -vvvv to see details'
 
     if warn:
         display.warning(warn)
@@ -83,13 +84,10 @@ class Group:
         return self.deserialize(data)
 
     def serialize(self):
-        parent_groups = []
-        for parent in self.parent_groups:
-            parent_groups.append(parent.serialize())
-
+        parent_groups = [parent.serialize() for parent in self.parent_groups]
         self._hosts = None
 
-        result = dict(
+        return dict(
             name=self.name,
             vars=self.vars.copy(),
             parent_groups=parent_groups,
@@ -97,12 +95,10 @@ class Group:
             hosts=self.hosts,
         )
 
-        return result
-
     def deserialize(self, data):
         self.__init__()
         self.name = data.get('name')
-        self.vars = data.get('vars', dict())
+        self.vars = data.get('vars', {})
         self.depth = data.get('depth', 0)
         self.hosts = data.get('hosts', [])
         self._hosts = None
@@ -141,16 +137,13 @@ class Group:
 
             for new_item in chain.from_iterable(getattr(g, rel) for g in unprocessed):
                 new_unprocessed.add(new_item)
-                if preserve_ordering:
-                    if new_item not in seen:
-                        ordered.append(new_item)
+                if preserve_ordering and new_item not in seen:
+                    ordered.append(new_item)
 
             new_unprocessed.difference_update(seen)
             unprocessed = new_unprocessed
 
-        if preserve_ordering:
-            return ordered
-        return seen
+        return ordered if preserve_ordering else seen
 
     def get_ancestors(self):
         return self._walk_relationship('parent_groups')
@@ -179,7 +172,9 @@ class Group:
             start_ancestors = group.get_ancestors()
             new_ancestors = self.get_ancestors()
             if group in new_ancestors:
-                raise AnsibleError("Adding group '%s' as child to '%s' creates a recursive dependency loop." % (to_native(group.name), to_native(self.name)))
+                raise AnsibleError(
+                    f"Adding group '{to_native(group.name)}' as child to '{to_native(self.name)}' creates a recursive dependency loop."
+                )
             new_ancestors.add(self)
             new_ancestors.difference_update(start_ancestors)
 
@@ -219,7 +214,9 @@ class Group:
                     g.depth = depth
                     unprocessed.update(g.child_groups)
             if depth - start_depth > len(seen):
-                raise AnsibleError("The group named '%s' has a recursive dependency loop." % to_native(self.name))
+                raise AnsibleError(
+                    f"The group named '{to_native(self.name)}' has a recursive dependency loop."
+                )
 
     def add_host(self, host):
         added = False
@@ -245,11 +242,10 @@ class Group:
 
         if key == 'ansible_group_priority':
             self.set_priority(int(value))
+        elif key in self.vars and isinstance(self.vars[key], MutableMapping) and isinstance(value, Mapping):
+            self.vars = combine_vars(self.vars, {key: value})
         else:
-            if key in self.vars and isinstance(self.vars[key], MutableMapping) and isinstance(value, Mapping):
-                self.vars = combine_vars(self.vars, {key: value})
-            else:
-                self.vars[key] = value
+            self.vars[key] = value
 
     def clear_hosts_cache(self):
 

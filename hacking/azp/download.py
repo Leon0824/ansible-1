@@ -53,10 +53,13 @@ def main():
 
 
 def run_id_arg(arg):
-    m = re.fullmatch(r"(?:https:\/\/dev\.azure\.com\/ansible\/ansible\/_build\/results\?buildId=)?(\d+)", arg)
-    if not m:
+    if m := re.fullmatch(
+        r"(?:https:\/\/dev\.azure\.com\/ansible\/ansible\/_build\/results\?buildId=)?(\d+)",
+        arg,
+    ):
+        return m[1]
+    else:
         raise ValueError("run does not seems to be a URI or an ID")
-    return m.group(1)
 
 
 def parse_args():
@@ -129,13 +132,13 @@ def parse_args():
 def download_run(args):
     """Download a run."""
 
-    output_dir = '%s' % args.run
+    output_dir = f'{args.run}'
 
     if not args.test and not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
     if args.run_metadata:
-        run_url = 'https://dev.azure.com/ansible/ansible/_apis/pipelines/%s/runs/%s?api-version=6.0-preview.1' % (args.pipeline_id, args.run)
+        run_url = f'https://dev.azure.com/ansible/ansible/_apis/pipelines/{args.pipeline_id}/runs/{args.run}?api-version=6.0-preview.1'
         run_info_response = requests.get(run_url)
         run_info_response.raise_for_status()
         run = run_info_response.json()
@@ -150,7 +153,9 @@ def download_run(args):
             with open(path, 'w') as metadata_fd:
                 metadata_fd.write(contents)
 
-    timeline_response = requests.get('https://dev.azure.com/ansible/ansible/_apis/build/builds/%s/timeline?api-version=6.0' % args.run)
+    timeline_response = requests.get(
+        f'https://dev.azure.com/ansible/ansible/_apis/build/builds/{args.run}/timeline?api-version=6.0'
+    )
     timeline_response.raise_for_status()
     timeline = timeline_response.json()
     roots = set()
@@ -181,19 +186,19 @@ def download_run(args):
         allowed.add(ri)
         for ci in children_of.get(r['id'], []):
             c = by_id[ci]
-            if not args.match_job_name.match("%s %s" % (r['name'], c['name'])):
+            if not args.match_job_name.match(f"{r['name']} {c['name']}"):
                 continue
             allow_recursive(c['id'])
 
     if args.artifacts:
-        artifact_list_url = 'https://dev.azure.com/ansible/ansible/_apis/build/builds/%s/artifacts?api-version=6.0' % args.run
+        artifact_list_url = f'https://dev.azure.com/ansible/ansible/_apis/build/builds/{args.run}/artifacts?api-version=6.0'
         artifact_list_response = requests.get(artifact_list_url)
         artifact_list_response.raise_for_status()
         for artifact in artifact_list_response.json()['value']:
             if artifact['source'] not in allowed or not args.match_artifact_name.match(artifact['name']):
                 continue
             if args.verbose:
-                print('%s/%s' % (output_dir, artifact['name']))
+                print(f"{output_dir}/{artifact['name']}")
             if not args.test:
                 response = requests.get(artifact['resource']['downloadUrl'])
                 response.raise_for_status()
@@ -211,10 +216,10 @@ def download_run(args):
                 name = p['name']
                 if name not in names:
                     names = [name] + names
-                parent_id = parent_of.get(p['id'], None)
+                parent_id = parent_of.get(p['id'])
 
             path = " ".join(names)
-            log_path = os.path.join(output_dir, '%s.log' % path)
+            log_path = os.path.join(output_dir, f'{path}.log')
             if args.verbose:
                 print(log_path)
             if not args.test:

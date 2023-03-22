@@ -51,10 +51,8 @@ def process_refs(topdir, plugin_names):
                 for ref_match in re.finditer(REF_RE, data):
                     label = ref_match.group(1)
 
-                    # If the ref label includes "<", then search for the label inside of the "<>"
-                    label_match = re.search(LABEL_RE, label)
-                    if label_match:
-                        label = label_match.group(1)
+                    if label_match := re.search(LABEL_RE, label):
+                        label = label_match[1]
 
                     # If the ref label is listed in plugins, then print that the file contains an unported ref
                     if label in plugin_names:

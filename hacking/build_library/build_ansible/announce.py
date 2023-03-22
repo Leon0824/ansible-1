@@ -221,8 +221,7 @@ def next_release_date(weeks=3):
         # Thursday of next week
         today += datetime.timedelta(days=(10 - numeric_today))
 
-    next_release = today + datetime.timedelta(days=days_in_the_future)
-    return next_release
+    return today + datetime.timedelta(days=days_in_the_future)
 
 
 def is_ansible_base(version):
@@ -273,11 +272,15 @@ def create_long_message(versions, name):
     next_release = next_release_date()
 
     template = JINJA_ENV.get_template('long')
-    message = template.render(versions=versions, version_str=version_str,
-                              name=name, hashes=hashes, next_release=next_release,
-                              is_ansible_base=is_ansible_base,
-                              pretty_version=pretty_version)
-    return message
+    return template.render(
+        versions=versions,
+        version_str=version_str,
+        name=name,
+        hashes=hashes,
+        next_release=next_release,
+        is_ansible_base=is_ansible_base,
+        pretty_version=pretty_version,
+    )
 
 
 def create_short_message(versions):

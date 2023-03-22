@@ -27,14 +27,14 @@ def get_token(token_file):
     if token_file:
         return token_file.read().strip()
 
-    token = os.getenv('GITHUB_TOKEN').strip()
-    if not token:
+    if token := os.getenv('GITHUB_TOKEN').strip():
+        return token
+    else:
         raise errors.MissingUserInput(
             'Please provide a file containing a github oauth token with public_repo scope'
             ' via the --github-token argument or set the GITHUB_TOKEN env var with your'
             ' github oauth token'
         )
-    return token
 
 
 def parse_deprecations(problems_file_handle):
@@ -47,10 +47,7 @@ def parse_deprecations(problems_file_handle):
         else:
             component, dummy = os.path.splitext(os.path.basename(path).lstrip('_'))
 
-        title = (
-            '%s contains deprecated call to be removed in %s' %
-            (component, ANSIBLE_MAJOR_VERSION)
-        )
+        title = f'{component} contains deprecated call to be removed in {ANSIBLE_MAJOR_VERSION}'
         deprecated[component].append(
             dict(title=title, path=path, line=line)
         )
@@ -63,7 +60,7 @@ def find_project_todo_column(repo, project_name):
         if project.name.lower() == project_name:
             break
     else:
-        raise errors.InvalidUserInput('%s was an invalid project name' % project_name)
+        raise errors.InvalidUserInput(f'{project_name} was an invalid project name')
 
     for project_column in project.columns():
         column_name = project_column.name.lower()
@@ -79,7 +76,7 @@ def create_issues(deprecated, body_tmpl, repo):
 
     for component, items in deprecated.items():
         title = items[0]['title']
-        path = '\n'.join(set((i['path']) for i in items))
+        path = '\n'.join({i['path'] for i in items})
         line = '\n'.join(i['line'] for i in items)
         body = body_tmpl % dict(component=component, path=path,
                                 line=line,
