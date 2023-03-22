@@ -83,7 +83,7 @@ class CLI(with_metaclass(ABCMeta, object)):
         display.vv(to_text(opt_help.version(self.parser.prog)))
 
         if C.CONFIG_FILE:
-            display.v(u"Using %s as config file" % to_text(C.CONFIG_FILE))
+            display.v(f"Using {to_text(C.CONFIG_FILE)} as config file")
         else:
             display.v(u"No config file found; using defaults")
 
@@ -92,14 +92,18 @@ class CLI(with_metaclass(ABCMeta, object)):
             name = deprecated[0]
             why = deprecated[1]['why']
             if 'alternatives' in deprecated[1]:
-                alt = ', use %s instead' % deprecated[1]['alternatives']
+                alt = f", use {deprecated[1]['alternatives']} instead"
             else:
                 alt = ''
             ver = deprecated[1].get('version')
             date = deprecated[1].get('date')
             collection_name = deprecated[1].get('collection_name')
-            display.deprecated("%s option, %s%s" % (name, why, alt),
-                               version=ver, date=date, collection_name=collection_name)
+            display.deprecated(
+                f"{name} option, {why}{alt}",
+                version=ver,
+                date=date,
+                collection_name=collection_name,
+            )
 
     @staticmethod
     def split_vault_id(vault_id):
@@ -109,8 +113,7 @@ class CLI(with_metaclass(ABCMeta, object)):
             return (None, vault_id)
 
         parts = vault_id.split('@', 1)
-        ret = tuple(parts)
-        return ret
+        return tuple(parts)
 
     @staticmethod
     def build_vault_ids(vault_ids, vault_password_files=None,
@@ -121,7 +124,7 @@ class CLI(with_metaclass(ABCMeta, object)):
 
         # convert vault_password_files into vault_ids slugs
         for password_file in vault_password_files:
-            id_slug = u'%s@%s' % (C.DEFAULT_VAULT_IDENTITY, password_file)
+            id_slug = f'{C.DEFAULT_VAULT_IDENTITY}@{password_file}'
 
             # note this makes --vault-id higher precedence than --vault-password-file
             # if we want to intertwingle them in order probably need a cli callback to populate vault_ids
@@ -133,7 +136,7 @@ class CLI(with_metaclass(ABCMeta, object)):
         # prompts cant/shouldnt work without a tty, so dont add prompt secrets
         if ask_vault_pass or (not vault_ids and auto_prompt):
 
-            id_slug = u'%s@%s' % (C.DEFAULT_VAULT_IDENTITY, u'prompt_ask_vault_pass')
+            id_slug = f'{C.DEFAULT_VAULT_IDENTITY}@prompt_ask_vault_pass'
             vault_ids.append(id_slug)
 
         return vault_ids
@@ -195,7 +198,7 @@ class CLI(with_metaclass(ABCMeta, object)):
                 try:
                     prompted_vault_secret.load()
                 except AnsibleError as exc:
-                    display.warning('Error in vault password prompt (%s): %s' % (vault_id_name, exc))
+                    display.warning(f'Error in vault password prompt ({vault_id_name}): {exc}')
                     raise
 
                 vault_secrets.append((built_vault_id, prompted_vault_secret))
@@ -206,7 +209,7 @@ class CLI(with_metaclass(ABCMeta, object)):
                 continue
 
             # assuming anything else is a password file
-            display.vvvvv('Reading vault password file: %s' % vault_id_value)
+            display.vvvvv(f'Reading vault password file: {vault_id_value}')
             # read vault_pass from a file
             file_vault_secret = get_file_vault_secret(filename=vault_id_value,
                                                       vault_id=vault_id_name,
@@ -216,7 +219,9 @@ class CLI(with_metaclass(ABCMeta, object)):
             try:
                 file_vault_secret.load()
             except AnsibleError as exc:
-                display.warning('Error in vault password file loading (%s): %s' % (vault_id_name, to_text(exc)))
+                display.warning(
+                    f'Error in vault password file loading ({vault_id_name}): {to_text(exc)}'
+                )
                 raise
 
             if vault_id_name:
@@ -243,9 +248,9 @@ class CLI(with_metaclass(ABCMeta, object)):
         try:
             if op['ask_pass']:
                 sshpass = getpass.getpass(prompt="SSH password: ")
-                become_prompt = "%s password[defaults to SSH password]: " % become_prompt_method
+                become_prompt = f"{become_prompt_method} password[defaults to SSH password]: "
             else:
-                become_prompt = "%s password: " % become_prompt_method
+                become_prompt = f"{become_prompt_method} password: "
 
             if op['become_ask_pass']:
                 becomepass = getpass.getpass(prompt=become_prompt)
@@ -266,9 +271,8 @@ class CLI(with_metaclass(ABCMeta, object)):
     def validate_conflicts(self, op, runas_opts=False, fork_opts=False):
         ''' check for conflicting options '''
 
-        if fork_opts:
-            if op.forks < 1:
-                self.parser.error("The number of processes (--forks) must be >= 1")
+        if fork_opts and op.forks < 1:
+            self.parser.error("The number of processes (--forks) must be >= 1")
 
         return op
 
@@ -348,8 +352,9 @@ class CLI(with_metaclass(ABCMeta, object)):
         # 'ansible-galaxy -vvv init' has no verbosity set but 'ansible-galaxy init -vvv' sets a level of 3. To preserve
         # back compat with pre-argparse changes we manually scan and set verbosity based on the argv values.
         if self.parser.prog in ['ansible-galaxy', 'ansible-vault'] and not options.verbosity:
-            verbosity_arg = next(iter([arg for arg in self.args if arg.startswith('-v')]), None)
-            if verbosity_arg:
+            if verbosity_arg := next(
+                iter([arg for arg in self.args if arg.startswith('-v')]), None
+            ):
                 display.deprecated("Setting verbosity before the arg sub command is deprecated, set the verbosity "
                                    "after the sub command", "2.13", collection_name='ansible.builtin')
                 options.verbosity = verbosity_arg.count('v')
@@ -383,11 +388,7 @@ class CLI(with_metaclass(ABCMeta, object)):
     @staticmethod
     def version_info(gitinfo=False):
         ''' return full ansible version info '''
-        if gitinfo:
-            # expensive call, user with care
-            ansible_version_string = opt_help.version()
-        else:
-            ansible_version_string = __version__
+        ansible_version_string = opt_help.version() if gitinfo else __version__
         ansible_version = ansible_version_string.split()[0]
         ansible_versions = ansible_version.split('.')
         for counter in range(len(ansible_versions)):
@@ -398,7 +399,7 @@ class CLI(with_metaclass(ABCMeta, object)):
             except Exception:
                 pass
         if len(ansible_versions) < 3:
-            for counter in range(len(ansible_versions), 3):
+            for _ in range(len(ansible_versions), 3):
                 ansible_versions.append(0)
         return {'string': ansible_version_string.strip(),
                 'full': ansible_version,
@@ -445,13 +446,11 @@ class CLI(with_metaclass(ABCMeta, object)):
         # all needs loader
         loader = DataLoader()
 
-        basedir = options.get('basedir', False)
-        if basedir:
+        if basedir := options.get('basedir', False):
             loader.set_basedir(basedir)
             add_all_plugin_dirs(basedir)
             AnsibleCollectionConfig.playbook_paths = basedir
-            default_collection = _get_collection_name_from_path(basedir)
-            if default_collection:
+            if default_collection := _get_collection_name_from_path(basedir):
                 display.warning(u'running with default collection {0}'.format(default_collection))
                 AnsibleCollectionConfig.default_collection = default_collection
 
@@ -487,8 +486,9 @@ class CLI(with_metaclass(ABCMeta, object)):
 
         inventory.subset(subset)
 
-        hosts = inventory.list_hosts(pattern)
-        if not hosts and no_hosts is False:
+        if hosts := inventory.list_hosts(pattern):
+            return hosts
+        elif no_hosts:
+            return hosts
+        else:
             raise AnsibleError("Specified hosts and/or --limit does not match any hosts")
-
-        return hosts

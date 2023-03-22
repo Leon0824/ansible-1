@@ -50,7 +50,7 @@ class AggregateStats:
     def decrement(self, what, host):
         _what = getattr(self, what)
         try:
-            if _what[host] - 1 < 0:
+            if _what[host] < 1:
                 # This should never happen, but let's be safe
                 raise KeyError("Don't be so negative")
             _what[host] -= 1

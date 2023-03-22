@@ -26,14 +26,14 @@ class PSModuleDepFinder(object):
 
     def __init__(self):
         # This is also used by validate-modules to get a module's required utils in base and a collection.
-        self.ps_modules = dict()
-        self.exec_scripts = dict()
+        self.ps_modules = {}
+        self.exec_scripts = {}
 
         # by defining an explicit dict of cs utils and where they are used, we
         # can potentially save time by not adding the type multiple times if it
         # isn't needed
-        self.cs_utils_wrapper = dict()
-        self.cs_utils_module = dict()
+        self.cs_utils_wrapper = {}
+        self.cs_utils_module = {}
 
         self.ps_version = None
         self.os_version = None
@@ -77,11 +77,7 @@ class PSModuleDepFinder(object):
     def scan_module(self, module_data, fqn=None, wrapper=False, powershell=True):
         lines = module_data.split(b'\n')
         module_utils = set()
-        if wrapper:
-            cs_utils = self.cs_utils_wrapper
-        else:
-            cs_utils = self.cs_utils_module
-
+        cs_utils = self.cs_utils_wrapper if wrapper else self.cs_utils_module
         if powershell:
             checks = [
                 # PS module contains '#Requires -Module Ansible.ModuleUtils.*'
@@ -99,8 +95,7 @@ class PSModuleDepFinder(object):
         for line in lines:
             for check in checks:
                 for pattern in check[0]:
-                    match = pattern.match(line)
-                    if match:
+                    if match := pattern.match(line):
                         # tolerate windows line endings by stripping any remaining
                         # newline chars
                         module_util_name = to_text(match.group(1).rstrip())
@@ -111,12 +106,10 @@ class PSModuleDepFinder(object):
                         break
 
             if powershell:
-                ps_version_match = self._re_ps_version.match(line)
-                if ps_version_match:
+                if ps_version_match := self._re_ps_version.match(line):
                     self._parse_version_match(ps_version_match, "ps_version")
 
-                os_version_match = self._re_os_version.match(line)
-                if os_version_match:
+                if os_version_match := self._re_os_version.match(line):
                     self._parse_version_match(os_version_match, "os_version")
 
                 # once become is set, no need to keep on checking recursively
@@ -126,8 +119,7 @@ class PSModuleDepFinder(object):
                         self.become = True
 
             if wrapper:
-                wrapper_match = self._re_wrapper.match(line)
-                if wrapper_match:
+                if wrapper_match := self._re_wrapper.match(line):
                     self.scan_exec_script(wrapper_match.group(1).rstrip())
 
         # recursively drill into each Requires to see if there are any more
@@ -142,7 +134,9 @@ class PSModuleDepFinder(object):
         if name in self.exec_scripts.keys():
             return
 
-        data = pkgutil.get_data("ansible.executor.powershell", to_native(name + ".ps1"))
+        data = pkgutil.get_data(
+            "ansible.executor.powershell", to_native(f"{name}.ps1")
+        )
         if data is None:
             raise AnsibleError("Could not find executor powershell script "
                                "for '%s'" % name)
@@ -150,10 +144,7 @@ class PSModuleDepFinder(object):
         b_data = to_bytes(data)
 
         # remove comments to reduce the payload size in the exec wrappers
-        if C.DEFAULT_DEBUG:
-            exec_script = b_data
-        else:
-            exec_script = _strip_comments(b_data)
+        exec_script = b_data if C.DEFAULT_DEBUG else _strip_comments(b_data)
         self.exec_scripts[name] = to_bytes(exec_script)
         self.scan_module(b_data, wrapper=True, powershell=True)
 
@@ -192,7 +183,10 @@ class PSModuleDepFinder(object):
                 module_util = import_module(n_package_name)
                 module_util_data = to_bytes(pkgutil.get_data(n_package_name, n_resource_name),
                                             errors='surrogate_or_strict')
-                util_fqn = to_text("%s.%s " % (n_package_name, submodules[-1]), errors='surrogate_or_strict')
+                util_fqn = to_text(
+                    f"{n_package_name}.{submodules[-1]} ",
+                    errors='surrogate_or_strict',
+                )
 
                 # Get the path of the util which is required for coverage collection.
                 resource_paths = list(module_util.__path__)
@@ -214,11 +208,10 @@ class PSModuleDepFinder(object):
         }
         if ext == ".psm1":
             self.ps_modules[m] = util_info
+        elif wrapper:
+            self.cs_utils_wrapper[m] = util_info
         else:
-            if wrapper:
-                self.cs_utils_wrapper[m] = util_info
-            else:
-                self.cs_utils_module[m] = util_info
+            self.cs_utils_module[m] = util_info
         self.scan_module(module_util_data, fqn=util_fqn, wrapper=wrapper, powershell=(ext == ".psm1"))
 
     def _parse_version_match(self, match, attribute):
@@ -227,24 +220,24 @@ class PSModuleDepFinder(object):
         # PowerShell cannot cast a string of "1" to Version, it must have at
         # least the major.minor for it to be valid so we append 0
         if match.group(2) is None:
-            new_version = "%s.0" % new_version
+            new_version = f"{new_version}.0"
 
         existing_version = getattr(self, attribute, None)
-        if existing_version is None:
+        if (
+            existing_version is not None
+            and LooseVersion(new_version) > LooseVersion(existing_version)
+            or existing_version is None
+        ):
             setattr(self, attribute, new_version)
-        else:
-            # determine which is the latest version and set that
-            if LooseVersion(new_version) > LooseVersion(existing_version):
-                setattr(self, attribute, new_version)
 
 
 def _slurp(path):
     if not os.path.exists(path):
-        raise AnsibleError("imported module support code does not exist at %s"
-                           % os.path.abspath(path))
-    fd = open(path, 'rb')
-    data = fd.read()
-    fd.close()
+        raise AnsibleError(
+            f"imported module support code does not exist at {os.path.abspath(path)}"
+        )
+    with open(path, 'rb') as fd:
+        data = fd.read()
     return data
 
 
@@ -286,12 +279,12 @@ def _create_powershell_wrapper(b_module_data, module_path, module_args,
         # flags if the substyle is 'script' which is set by action/script
         finder.scan_module(b_module_data, fqn=module_fqn, powershell=(substyle == "powershell"))
 
-    module_wrapper = "module_%s_wrapper" % substyle
+    module_wrapper = f"module_{substyle}_wrapper"
     exec_manifest = dict(
         module_entry=to_text(base64.b64encode(b_module_data)),
-        powershell_modules=dict(),
-        csharp_utils=dict(),
-        csharp_utils_module=list(),  # csharp_utils only required by a module
+        powershell_modules={},
+        csharp_utils={},
+        csharp_utils_module=[],
         module_args=module_args,
         actions=[module_wrapper],
         environment=environment,
@@ -331,9 +324,7 @@ def _create_powershell_wrapper(b_module_data, module_path, module_args,
         exec_manifest['become_flags'] = None
 
     coverage_manifest = dict(
-        module_path=module_path,
-        module_util_paths=dict(),
-        output=None,
+        module_path=module_path, module_util_paths={}, output=None
     )
     coverage_output = C.config.get_config_value('COVERAGE_REMOTE_OUTPUT', variables=task_vars)
     if coverage_output and substyle == 'powershell':
@@ -384,6 +375,4 @@ def _create_powershell_wrapper(b_module_data, module_path, module_args,
         exec_manifest['coverage'] = coverage_manifest
 
     b_json = to_bytes(json.dumps(exec_manifest))
-    # delimit the payload JSON from the wrapper to keep sensitive contents out of scriptblocks (which can be logged)
-    b_data = exec_wrapper + b'\0\0\0\0' + b_json
-    return b_data
+    return exec_wrapper + b'\0\0\0\0' + b_json

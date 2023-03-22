@@ -53,10 +53,10 @@ class PlaybookExecutor:
         self._variable_manager = variable_manager
         self._loader = loader
         self.passwords = passwords
-        self._unreachable_hosts = dict()
+        self._unreachable_hosts = {}
 
         if context.CLIARGS.get('listhosts') or context.CLIARGS.get('listtasks') or \
-                context.CLIARGS.get('listtags') or context.CLIARGS.get('syntax'):
+                    context.CLIARGS.get('listtags') or context.CLIARGS.get('syntax'):
             self._tqm = None
         else:
             self._tqm = TaskQueueManager(
@@ -112,8 +112,7 @@ class PlaybookExecutor:
                 # FIXME: move out of inventory self._inventory.set_playbook_basedir(os.path.realpath(os.path.dirname(playbook_path)))
 
                 if self._tqm is None:  # we are doing a listing
-                    entry = {'playbook': playbook_path}
-                    entry['plays'] = []
+                    entry = {'playbook': playbook_path, 'plays': []}
                 else:
                     # make sure the tqm has callbacks loaded
                     self._tqm.load_callbacks()
@@ -203,7 +202,7 @@ class PlaybookExecutor:
                             # conditions are met, we break out, otherwise we only break out if the entire
                             # batch failed
                             failed_hosts_count = len(self._tqm._failed_hosts) + len(self._tqm._unreachable_hosts) - \
-                                (previously_failed + previously_unreachable)
+                                    (previously_failed + previously_unreachable)
 
                             if len(batch) == failed_hosts_count:
                                 break_play = True
@@ -240,7 +239,7 @@ class PlaybookExecutor:
                                 basedir = '~/'
 
                             (retry_name, _) = os.path.splitext(os.path.basename(playbook_path))
-                            filename = os.path.join(basedir, "%s.retry" % retry_name)
+                            filename = os.path.join(basedir, f"{retry_name}.retry")
                             if self._generate_retry_inventory(filename, retries):
                                 display.display("\tto retry, use: --limit @%s\n" % filename)
 
@@ -302,20 +301,14 @@ class PlaybookExecutor:
                 serialized_batches.append(all_hosts)
                 break
             else:
-                play_hosts = []
-                for x in range(serial):
-                    if len(all_hosts) > 0:
-                        play_hosts.append(all_hosts.pop(0))
-
+                play_hosts = [all_hosts.pop(0) for _ in range(serial) if len(all_hosts) > 0]
                 serialized_batches.append(play_hosts)
 
             # increment the current batch list item number, and if we've hit
             # the end keep using the last element until we've consumed all of
             # the hosts in the inventory
             cur_item += 1
-            if cur_item > len(serial_batch_list) - 1:
-                cur_item = len(serial_batch_list) - 1
-
+            cur_item = min(cur_item, len(serial_batch_list) - 1)
         return serialized_batches
 
     def _generate_retry_inventory(self, retry_path, replay_hosts):

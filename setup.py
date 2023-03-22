@@ -46,7 +46,7 @@ def find_package_info(*file_paths):
                              info_file, re.M)
 
     if version_match and author_match:
-        return version_match.group(1), author_match.group(1)
+        return version_match[1], author_match[1]
     raise RuntimeError("Unable to find package info.")
 
 
@@ -59,7 +59,7 @@ def _validate_install_ansible_core():
     # and bdist_wheel is the only place we can prevent pip
     # from installing, as pip creates a wheel, and installs the wheel
     # and we have no influence over installation within a wheel
-    if set(('sdist', 'egg_info')).intersection(sys.argv):
+    if {'sdist', 'egg_info'}.intersection(sys.argv):
         return
 
     if os.getenv('ANSIBLE_SKIP_CONFLICT_CHECK', '') not in ('', '0'):
@@ -189,31 +189,29 @@ def _maintain_symlinks(symlink_type, base_path):
         with open(SYMLINK_CACHE, 'r') as f:
             symlink_data = json.load(f)
     except (IOError, OSError) as e:
-        # IOError on py2, OSError on py3.  Both have errno
-        if e.errno == 2:
-            # SYMLINKS_CACHE doesn't exist.  Fallback to trying to create the
-            # cache now.  Will work if we're running directly from a git
-            # checkout or from an sdist created earlier.
-            library_symlinks = _find_symlinks('lib', '.py')
-            library_symlinks.update(_find_symlinks('test/lib'))
-
-            symlink_data = {'script': _find_symlinks('bin'),
-                            'library': library_symlinks,
-                            }
-
-            # Sanity check that something we know should be a symlink was
-            # found.  We'll take that to mean that the current directory
-            # structure properly reflects symlinks in the git repo
-            if 'ansible-playbook' in symlink_data['script']['ansible']:
-                _cache_symlinks(symlink_data)
-            else:
-                raise RuntimeError(
-                    "Pregenerated symlink list was not present and expected "
-                    "symlinks in ./bin were missing or broken. "
-                    "Perhaps this isn't a git checkout?"
-                )
-        else:
+        if e.errno != 2:
             raise
+        # SYMLINKS_CACHE doesn't exist.  Fallback to trying to create the
+        # cache now.  Will work if we're running directly from a git
+        # checkout or from an sdist created earlier.
+        library_symlinks = _find_symlinks('lib', '.py')
+        library_symlinks.update(_find_symlinks('test/lib'))
+
+        symlink_data = {'script': _find_symlinks('bin'),
+                        'library': library_symlinks,
+                        }
+
+        # Sanity check that something we know should be a symlink was
+        # found.  We'll take that to mean that the current directory
+        # structure properly reflects symlinks in the git repo
+        if 'ansible-playbook' in symlink_data['script']['ansible']:
+            _cache_symlinks(symlink_data)
+        else:
+            raise RuntimeError(
+                "Pregenerated symlink list was not present and expected "
+                "symlinks in ./bin were missing or broken. "
+                "Perhaps this isn't a git checkout?"
+            )
     symlinks = symlink_data[symlink_type]
 
     for source in symlinks:
@@ -223,9 +221,7 @@ def _maintain_symlinks(symlink_type, base_path):
                 try:
                     os.unlink(dest_path)
                 except OSError as e:
-                    if e.errno == 2:
-                        # File does not exist which is all we wanted
-                        pass
+                    pass
                 os.symlink(source, dest_path)
 
 
@@ -285,14 +281,12 @@ def read_file(file_name):
 
 def read_requirements(file_name):
     """Read requirements file as a list."""
-    reqs = read_file(file_name).splitlines()
-    if not reqs:
+    if reqs := read_file(file_name).splitlines():
+        return reqs
+    else:
         raise RuntimeError(
-            "Unable to read requirements from the %s file"
-            "That indicates this copy of the source code is incomplete."
-            % file_name
+            f"Unable to read requirements from the {file_name} fileThat indicates this copy of the source code is incomplete."
         )
-    return reqs
 
 
 def get_dynamic_setup_params():

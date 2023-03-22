@@ -62,7 +62,7 @@ def list_collection_dirs(search_paths=None, coll_filter=None):
             try:
                 (namespace, collection) = coll_filter.split('.')
             except ValueError:
-                raise AnsibleError("Invalid collection pattern supplied: %s" % coll_filter)
+                raise AnsibleError(f"Invalid collection pattern supplied: {coll_filter}")
         else:
             namespace = coll_filter
 
@@ -76,21 +76,13 @@ def list_collection_dirs(search_paths=None, coll_filter=None):
 
         if os.path.exists(b_coll_root) and os.path.isdir(b_coll_root):
 
-            if namespace is None:
-                namespaces = os.listdir(b_coll_root)
-            else:
-                namespaces = [namespace]
-
+            namespaces = os.listdir(b_coll_root) if namespace is None else [namespace]
             for ns in namespaces:
                 b_namespace_dir = os.path.join(b_coll_root, to_bytes(ns))
 
                 if os.path.isdir(b_namespace_dir):
 
-                    if collection is None:
-                        colls = os.listdir(b_namespace_dir)
-                    else:
-                        colls = [collection]
-
+                    colls = os.listdir(b_namespace_dir) if collection is None else [collection]
                     for mycoll in colls:
 
                         # skip dupe collections as they will be masked in execution

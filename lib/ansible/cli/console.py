@@ -74,7 +74,7 @@ class ConsoleCLI(CLI, cmd.Cmd):
         self.pattern = None
         self.variable_manager = None
         self.loader = None
-        self.passwords = dict()
+        self.passwords = {}
 
         self.modules = None
         self.cwd = '*'
@@ -159,26 +159,26 @@ class ConsoleCLI(CLI, cmd.Cmd):
 
     def _find_modules_in_path(self, path):
 
-        if os.path.isdir(path):
-            for module in os.listdir(path):
-                if module.startswith('.'):
+        if not os.path.isdir(path):
+            return
+        for module in os.listdir(path):
+            if module.startswith('.'):
+                continue
+            elif os.path.isdir(module):
+                self._find_modules_in_path(module)
+            elif module.startswith('__'):
+                continue
+            elif any(module.endswith(x) for x in C.REJECT_EXTS):
+                continue
+            elif module in C.IGNORE_FILES:
+                continue
+            elif module.startswith('_'):
+                fullpath = '/'.join([path, module])
+                if os.path.islink(fullpath):  # avoids aliases
                     continue
-                elif os.path.isdir(module):
-                    self._find_modules_in_path(module)
-                elif module.startswith('__'):
-                    continue
-                elif any(module.endswith(x) for x in C.REJECT_EXTS):
-                    continue
-                elif module in C.IGNORE_FILES:
-                    continue
-                elif module.startswith('_'):
-                    fullpath = '/'.join([path, module])
-                    if os.path.islink(fullpath):  # avoids aliases
-                        continue
-                    module = module.replace('_', '', 1)
+                module = module.replace('_', '', 1)
 
-                module = os.path.splitext(module)[0]  # removes the extension
-                yield module
+            yield os.path.splitext(module)[0]
 
     def default(self, arg, forceshell=False):
         """ actually runs modules """
@@ -218,7 +218,7 @@ class ConsoleCLI(CLI, cmd.Cmd):
             )
             play = Play().load(play_ds, variable_manager=self.variable_manager, loader=self.loader)
         except Exception as e:
-            display.error(u"Unable to build command: %s" % to_text(e))
+            display.error(f"Unable to build command: {to_text(e)}")
             return False
 
         try:
@@ -295,9 +295,9 @@ class ConsoleCLI(CLI, cmd.Cmd):
         else:
             try:
                 display.verbosity = int(arg)
-                display.v('verbosity level set to %s' % arg)
+                display.v(f'verbosity level set to {arg}')
             except (TypeError, ValueError) as e:
-                display.error('The verbosity must be a valid integer: %s' % to_text(e))
+                display.error(f'The verbosity must be a valid integer: {to_text(e)}')
 
     def do_cd(self, arg):
         """
@@ -332,7 +332,7 @@ class ConsoleCLI(CLI, cmd.Cmd):
         """Toggle whether plays run with become"""
         if arg:
             self.become = boolean(arg, strict=False)
-            display.v("become changed to %s" % self.become)
+            display.v(f"become changed to {self.become}")
             self.set_prompt()
         else:
             display.display("Please specify become value, e.g. `become yes`")
@@ -351,35 +351,35 @@ class ConsoleCLI(CLI, cmd.Cmd):
             self.become_user = arg
         else:
             display.display("Please specify a user, e.g. `become_user jenkins`")
-            display.v("Current user is %s" % self.become_user)
+            display.v(f"Current user is {self.become_user}")
         self.set_prompt()
 
     def do_become_method(self, arg):
         """Given a become_method, set the privilege escalation method when using become"""
         if arg:
             self.become_method = arg
-            display.v("become_method changed to %s" % self.become_method)
+            display.v(f"become_method changed to {self.become_method}")
         else:
             display.display("Please specify a become_method, e.g. `become_method su`")
-            display.v("Current become_method is %s" % self.become_method)
+            display.v(f"Current become_method is {self.become_method}")
 
     def do_check(self, arg):
         """Toggle whether plays run with check mode"""
         if arg:
             self.check_mode = boolean(arg, strict=False)
-            display.display("check mode changed to %s" % self.check_mode)
+            display.display(f"check mode changed to {self.check_mode}")
         else:
             display.display("Please specify check mode value, e.g. `check yes`")
-            display.v("check mode is currently %s." % self.check_mode)
+            display.v(f"check mode is currently {self.check_mode}.")
 
     def do_diff(self, arg):
         """Toggle whether plays run with diff"""
         if arg:
             self.diff = boolean(arg, strict=False)
-            display.display("diff mode changed to %s" % self.diff)
+            display.display(f"diff mode changed to {self.diff}")
         else:
             display.display("Please specify a diff value , e.g. `diff yes`")
-            display.v("diff mode is currently %s" % self.diff)
+            display.v(f"diff mode is currently {self.diff}")
 
     def do_timeout(self, arg):
         """Set the timeout"""
@@ -391,7 +391,9 @@ class ConsoleCLI(CLI, cmd.Cmd):
                 else:
                     self.task_timeout = timeout
             except (TypeError, ValueError) as e:
-                display.error('The timeout must be a valid positive integer, or 0 to disable: %s' % to_text(e))
+                display.error(
+                    f'The timeout must be a valid positive integer, or 0 to disable: {to_text(e)}'
+                )
         else:
             display.display('Usage: timeout <seconds>')
 
@@ -403,19 +405,24 @@ class ConsoleCLI(CLI, cmd.Cmd):
     do_EOF = do_exit
 
     def helpdefault(self, module_name):
-        if module_name in self.modules:
-            in_path = module_loader.find_plugin(module_name)
-            if in_path:
-                oc, a, _, _ = plugin_docs.get_docstring(in_path, fragment_loader)
-                if oc:
-                    display.display(oc['short_description'])
-                    display.display('Parameters:')
-                    for opt in oc['options'].keys():
-                        display.display('  ' + stringc(opt, self.NORMAL_PROMPT) + ' ' + oc['options'][opt]['description'][0])
-                else:
-                    display.error('No documentation found for %s.' % module_name)
+        if module_name not in self.modules:
+            return
+        if in_path := module_loader.find_plugin(module_name):
+            oc, a, _, _ = plugin_docs.get_docstring(in_path, fragment_loader)
+            if oc:
+                display.display(oc['short_description'])
+                display.display('Parameters:')
+                for opt in oc['options'].keys():
+                    display.display(
+                        f'  {stringc(opt, self.NORMAL_PROMPT)} '
+                        + oc['options'][opt]['description'][0]
+                    )
             else:
-                display.error('%s is not a valid command, use ? to list all valid commands.' % module_name)
+                display.error(f'No documentation found for {module_name}.')
+        else:
+            display.error(
+                f'{module_name} is not a valid command, use ? to list all valid commands.'
+            )
 
     def complete_cd(self, text, line, begidx, endidx):
         mline = line.partition(' ')[2]
@@ -434,7 +441,7 @@ class ConsoleCLI(CLI, cmd.Cmd):
             offs = len(mline) - len(text)
             completions = self.module_args(line.split()[0])
 
-            return [s[offs:] + '=' for s in completions if s.startswith(mline)]
+            return [f'{s[offs:]}=' for s in completions if s.startswith(mline)]
 
     def module_args(self, module_name):
         in_path = module_loader.find_plugin(module_name)
@@ -465,8 +472,12 @@ class ConsoleCLI(CLI, cmd.Cmd):
         # dynamically add modules as commands
         self.modules = self.list_modules()
         for module in self.modules:
-            setattr(self, 'do_' + module, lambda arg, module=module: self.default(module + ' ' + arg))
-            setattr(self, 'help_' + module, lambda module=module: self.helpdefault(module))
+            setattr(
+                self,
+                f'do_{module}',
+                lambda arg, module=module: self.default(f'{module} {arg}'),
+            )
+            setattr(self, f'help_{module}', lambda module=module: self.helpdefault(module))
 
         (sshpass, becomepass) = self.ask_passwords()
         self.passwords = {'conn_pass': sshpass, 'become_pass': becomepass}

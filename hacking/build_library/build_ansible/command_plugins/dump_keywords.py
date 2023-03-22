@@ -60,7 +60,7 @@ def extract_keywords(keyword_definitions):
                 pb_keywords[pb_class_name][keyword] = keyword_definitions[keyword]
             else:
                 # check if there is an alias, otherwise undocumented
-                alias = getattr(getattr(playbook_class, '_%s' % keyword), 'alias', None)
+                alias = getattr(getattr(playbook_class, f'_{keyword}'), 'alias', None)
                 if alias and alias in keyword_definitions:
                     pb_keywords[pb_class_name][alias] = keyword_definitions[alias]
                     del pb_keywords[pb_class_name][keyword]

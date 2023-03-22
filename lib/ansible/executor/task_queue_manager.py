@@ -131,13 +131,15 @@ class TaskQueueManager:
         self._terminated = False
 
         # dictionaries to keep track of failed/unreachable hosts
-        self._failed_hosts = dict()
-        self._unreachable_hosts = dict()
+        self._failed_hosts = {}
+        self._unreachable_hosts = {}
 
         try:
             self._final_q = FinalQueue()
         except OSError as e:
-            raise AnsibleError("Unable to use multiprocessing, this is normally caused by lack of access to /dev/shm: %s" % to_native(e))
+            raise AnsibleError(
+                f"Unable to use multiprocessing, this is normally caused by lack of access to /dev/shm: {to_native(e)}"
+            )
 
         self._callback_lock = threading.Lock()
 
@@ -148,8 +150,7 @@ class TaskQueueManager:
     def _initialize_processes(self, num):
         self._workers = []
 
-        for i in range(num):
-            self._workers.append(None)
+        self._workers.extend(None for _ in range(num))
 
     def load_callbacks(self):
         '''
@@ -169,11 +170,12 @@ class TaskQueueManager:
             stdout_callback_loaded = True
         elif isinstance(self._stdout_callback, string_types):
             if self._stdout_callback not in callback_loader:
-                raise AnsibleError("Invalid callback for stdout specified: %s" % self._stdout_callback)
-            else:
-                self._stdout_callback = callback_loader.get(self._stdout_callback)
-                self._stdout_callback.set_options()
-                stdout_callback_loaded = True
+                raise AnsibleError(
+                    f"Invalid callback for stdout specified: {self._stdout_callback}"
+                )
+            self._stdout_callback = callback_loader.get(self._stdout_callback)
+            self._stdout_callback.set_options()
+            stdout_callback_loaded = True
         else:
             raise AnsibleError("callback must be an instance of CallbackBase or the name of a callback plugin")
 
@@ -182,16 +184,12 @@ class TaskQueueManager:
 
         # add enabled callbacks that refer to collections, which might not appear in normal listing
         for c in C.CALLBACKS_ENABLED:
-            # load all, as collection ones might be using short/redirected names and not a fqcn
-            plugin = callback_loader.get(c, class_only=True)
-
-            # TODO: check if this skip is redundant, loader should handle bad file/plugin cases already
-            if plugin:
+            if plugin := callback_loader.get(c, class_only=True):
                 # avoids incorrect and dupes possible due to collections
                 if plugin not in callback_list:
                     callback_list.append(plugin)
             else:
-                display.warning("Skipping callback plugin '%s', unable to load" % c)
+                display.warning(f"Skipping callback plugin '{c}', unable to load")
 
         # for each callback in the list see if we should add it to 'active callbacks' used in the play
         for callback_plugin in callback_list:
@@ -199,20 +197,20 @@ class TaskQueueManager:
             callback_type = getattr(callback_plugin, 'CALLBACK_TYPE', '')
             callback_needs_enabled = getattr(callback_plugin, 'CALLBACK_NEEDS_ENABLED', getattr(callback_plugin, 'CALLBACK_NEEDS_WHITELIST', False))
 
-            # try to get colleciotn world name first
-            cnames = getattr(callback_plugin, '_redirected_names', [])
-            if cnames:
+            if cnames := getattr(callback_plugin, '_redirected_names', []):
                 # store the name the plugin was loaded as, as that's what we'll need to compare to the configured callback list later
                 callback_name = cnames[0]
             else:
                 # fallback to 'old loader name'
                 (callback_name, _) = os.path.splitext(os.path.basename(callback_plugin._original_path))
 
-            display.vvvvv("Attempting to use '%s' callback." % (callback_name))
+            display.vvvvv(f"Attempting to use '{callback_name}' callback.")
             if callback_type == 'stdout':
                 # we only allow one callback of type 'stdout' to be loaded,
                 if callback_name != self._stdout_callback or stdout_callback_loaded:
-                    display.vv("Skipping callback '%s', as we already have a stdout callback." % (callback_name))
+                    display.vv(
+                        f"Skipping callback '{callback_name}', as we already have a stdout callback."
+                    )
                     continue
                 stdout_callback_loaded = True
             elif callback_name == 'tree' and self._run_tree:
@@ -225,21 +223,24 @@ class TaskQueueManager:
                 continue
 
             try:
-                callback_obj = callback_plugin()
-                # avoid bad plugin not returning an object, only needed cause we do class_only load and bypass loader checks,
-                # really a bug in the plugin itself which we ignore as callback errors are not supposed to be fatal.
-                if callback_obj:
+                if callback_obj := callback_plugin():
                     # skip initializing if we already did the work for the same plugin (even with diff names)
                     if callback_obj not in self._callback_plugins:
                         callback_obj.set_options()
                         self._callback_plugins.append(callback_obj)
                     else:
-                        display.vv("Skipping callback '%s', already loaded as '%s'." % (callback_plugin, callback_name))
+                        display.vv(
+                            f"Skipping callback '{callback_plugin}', already loaded as '{callback_name}'."
+                        )
                 else:
-                    display.warning("Skipping callback '%s', as it does not create a valid plugin instance." % callback_name)
+                    display.warning(
+                        f"Skipping callback '{callback_name}', as it does not create a valid plugin instance."
+                    )
                     continue
             except Exception as e:
-                display.warning("Skipping callback '%s', unable to load due to: %s" % (callback_name, to_native(e)))
+                display.warning(
+                    f"Skipping callback '{callback_name}', unable to load due to: {to_native(e)}"
+                )
                 continue
 
         self._callbacks_loaded = True
@@ -297,7 +298,10 @@ class TaskQueueManager:
         # load the specified strategy (or the default linear one)
         strategy = strategy_loader.get(new_play.strategy, self)
         if strategy is None:
-            raise AnsibleError("Invalid play strategy specified: %s" % new_play.strategy, obj=play._ds)
+            raise AnsibleError(
+                f"Invalid play strategy specified: {new_play.strategy}",
+                obj=play._ds,
+            )
 
         # Because the TQM may survive multiple play runs, we start by marking
         # any hosts as failed in the iterator here which may have been marked
@@ -349,32 +353,33 @@ class TaskQueueManager:
         #     Fix:   https://hg.python.org/cpython/rev/d316315a8781
         #
         try:
-            if (2, 6) == (sys.version_info[0:2]):
+            if (2, 6) == sys.version_info[:2]:
                 time.sleep(0.0001)
         except (IndexError, AttributeError):
             # In case there is an issue getting the version info, don't raise an Exception
             pass
 
     def _cleanup_processes(self):
-        if hasattr(self, '_workers'):
-            for attempts_remaining in range(C.WORKER_SHUTDOWN_POLL_COUNT - 1, -1, -1):
-                if not any(worker_prc and worker_prc.is_alive() for worker_prc in self._workers):
-                    break
+        if not hasattr(self, '_workers'):
+            return
+        for attempts_remaining in range(C.WORKER_SHUTDOWN_POLL_COUNT - 1, -1, -1):
+            if not any(worker_prc and worker_prc.is_alive() for worker_prc in self._workers):
+                break
 
-                if attempts_remaining:
-                    time.sleep(C.WORKER_SHUTDOWN_POLL_DELAY)
-                else:
-                    display.warning('One or more worker processes are still running and will be terminated.')
+            if attempts_remaining:
+                time.sleep(C.WORKER_SHUTDOWN_POLL_DELAY)
+            else:
+                display.warning('One or more worker processes are still running and will be terminated.')
 
-            for worker_prc in self._workers:
-                if worker_prc and worker_prc.is_alive():
-                    try:
-                        worker_prc.terminate()
-                    except AttributeError:
-                        pass
+        for worker_prc in self._workers:
+            if worker_prc and worker_prc.is_alive():
+                try:
+                    worker_prc.terminate()
+                except AttributeError:
+                    pass
 
     def clear_failed_hosts(self):
-        self._failed_hosts = dict()
+        self._failed_hosts = {}
 
     def get_inventory(self):
         return self._inventory
@@ -393,14 +398,7 @@ class TaskQueueManager:
 
     def has_dead_workers(self):
 
-        # [<WorkerProcess(WorkerProcess-2, stopped[SIGKILL])>,
-        # <WorkerProcess(WorkerProcess-2, stopped[SIGTERM])>
-
-        defunct = False
-        for x in self._workers:
-            if getattr(x, 'exitcode', None):
-                defunct = True
-        return defunct
+        return any(getattr(x, 'exitcode', None) for x in self._workers)
 
     @lock_decorator(attr='_callback_lock')
     def send_callback(self, method_name, *args, **kwargs):
@@ -451,7 +449,9 @@ class TaskQueueManager:
                     method(*new_args, **kwargs)
                 except Exception as e:
                     # TODO: add config toggle to make this fatal or not?
-                    display.warning(u"Failure using method (%s) in callback plugin (%s): %s" % (to_text(method_name), to_text(callback_plugin), to_text(e)))
+                    display.warning(
+                        f"Failure using method ({to_text(method_name)}) in callback plugin ({to_text(callback_plugin)}): {to_text(e)}"
+                    )
                     from traceback import format_tb
                     from sys import exc_info
                     display.vvv('Callback Exception: \n' + ' '.join(format_tb(exc_info()[2])))

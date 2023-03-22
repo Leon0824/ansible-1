@@ -21,15 +21,17 @@ except Exception:
     pass
 
 target = sys.argv.pop(1)
-myclass = "%sCLI" % target.capitalize()
+myclass = f"{target.capitalize()}CLI"
 
 try:
     # define cli
-    mycli = getattr(__import__("ansible.cli.%s" % target, fromlist=[myclass]), myclass)
+    mycli = getattr(
+        __import__(f"ansible.cli.{target}", fromlist=[myclass]), myclass
+    )
 except ImportError as e:
     msg = getattr(e, 'msg', getattr(e, message, ''))
-    if msg.endswith(' %s' % target):
-        raise Exception("Ansible sub-program not implemented: %s" % target)
+    if msg.endswith(f' {target}'):
+        raise Exception(f"Ansible sub-program not implemented: {target}")
     else:
         raise
 

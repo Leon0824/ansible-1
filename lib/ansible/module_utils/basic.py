@@ -106,7 +106,7 @@ except ImportError as e:
     sys.exit(1)
 
 
-AVAILABLE_HASH_ALGORITHMS = dict()
+AVAILABLE_HASH_ALGORITHMS = {}
 try:
     import hashlib
 
@@ -246,11 +246,9 @@ MODE_OPERATOR_RE = re.compile(r'[+=-]')
 USERS_RE = re.compile(r'[^ugo]')
 PERMS_RE = re.compile(r'[^rwxXstugo]')
 
-# Used for determining if the system is running a new enough python version
-# and should only restrict on our documented minimum versions
-_PY3_MIN = sys.version_info[:2] >= (3, 5)
 _PY2_MIN = (2, 6) <= sys.version_info[:2] < (3,)
 _PY26 = (2, 6) == sys.version_info[:2]
+_PY3_MIN = sys.version_info[:2] >= (3, 5)
 _PY_MIN = _PY3_MIN or _PY2_MIN
 if not _PY_MIN:
     print(
@@ -261,8 +259,7 @@ if not _PY_MIN:
 
 if _PY26:
     deprecate(
-        'ansible-core 2.13 will require Python 2.7 or newer on the target. '
-        'Current version: %s' % ''.join(sys.version.splitlines()),
+        f"ansible-core 2.13 will require Python 2.7 or newer on the target. Current version: {''.join(sys.version.splitlines())}",
         version='2.13',
     )
 
@@ -328,7 +325,7 @@ def heuristic_log_sanitize(data, no_log_values=None):
             end = data.rindex('@', 0, begin)
         except ValueError:
             # No passwd in the rest of the data
-            output.insert(0, data[0:begin])
+            output.insert(0, data[:begin])
             break
 
         # Search for the beginning of a passwd
@@ -350,7 +347,7 @@ def heuristic_log_sanitize(data, no_log_values=None):
                 if begin == 0:
                     # Searched the whole string so there's no password
                     # here.  Return the remaining data
-                    output.insert(0, data[0:begin])
+                    output.insert(0, data[:begin])
                     break
                 # Search for a different beginning of the password field.
                 sep_search_end = begin
@@ -389,19 +386,14 @@ def _load_params():
         # We control the args and we pass them as utf8
         if len(sys.argv) > 1:
             if os.path.isfile(sys.argv[1]):
-                fd = open(sys.argv[1], 'rb')
-                buffer = fd.read()
-                fd.close()
+                with open(sys.argv[1], 'rb') as fd:
+                    buffer = fd.read()
             else:
                 buffer = sys.argv[1]
                 if PY3:
                     buffer = buffer.encode('utf-8', errors='surrogateescape')
-        # default case, read from stdin
         else:
-            if PY2:
-                buffer = sys.stdin.read()
-            else:
-                buffer = sys.stdin.buffer.read()
+            buffer = sys.stdin.read() if PY2 else sys.stdin.buffer.read()
         _ANSIBLE_ARGS = buffer
 
     try:
@@ -426,11 +418,11 @@ def _load_params():
 
 def missing_required_lib(library, reason=None, url=None):
     hostname = platform.node()
-    msg = "Failed to import the required Python library (%s) on %s's Python %s." % (library, hostname, sys.executable)
+    msg = f"Failed to import the required Python library ({library}) on {hostname}'s Python {sys.executable}."
     if reason:
-        msg += " This is required %s." % reason
+        msg += f" This is required {reason}."
     if url:
-        msg += " See %s for more info." % url
+        msg += f" See {url} for more info."
 
     msg += (" Please read the module documentation and install it in the appropriate location."
             " If the required library is installed, but Ansible is using the wrong Python interpreter,"
@@ -479,7 +471,7 @@ class AnsibleModule(object):
 
         self.aliases = {}
         self._legal_inputs = []
-        self._options_context = list()
+        self._options_context = []
         self._tmpdir = None
 
         if add_file_common_args:
@@ -523,7 +515,10 @@ class AnsibleModule(object):
             self.fail_json(msg=msg)
 
         if self.check_mode and not self.supports_check_mode:
-            self.exit_json(skipped=True, msg="remote module (%s) does not support check mode" % self._name)
+            self.exit_json(
+                skipped=True,
+                msg=f"remote module ({self._name}) does not support check mode",
+            )
 
         # This is for backwards compatibility only.
         self._CHECK_ARGUMENT_TYPES_DISPATCHER = DEFAULT_TYPE_VALIDATORS
@@ -545,32 +540,29 @@ class AnsibleModule(object):
         # the module needs to create it and clean it up once finished.
         # otherwise we create our own module tmp dir from the system defaults
         if self._tmpdir is None:
-            basedir = None
-
             if self._remote_tmp is not None:
                 basedir = os.path.expanduser(os.path.expandvars(self._remote_tmp))
-
+            else:
+                basedir = None
             if basedir is not None and not os.path.exists(basedir):
                 try:
                     os.makedirs(basedir, mode=0o700)
                 except (OSError, IOError) as e:
-                    self.warn("Unable to use %s as temporary directory, "
-                              "failing back to system: %s" % (basedir, to_native(e)))
+                    self.warn(
+                        f"Unable to use {basedir} as temporary directory, failing back to system: {to_native(e)}"
+                    )
                     basedir = None
                 else:
-                    self.warn("Module remote_tmp %s did not exist and was "
-                              "created with a mode of 0700, this may cause"
-                              " issues when running as another user. To "
-                              "avoid this, create the remote_tmp dir with "
-                              "the correct permissions manually" % basedir)
+                    self.warn(
+                        f"Module remote_tmp {basedir} did not exist and was created with a mode of 0700, this may cause issues when running as another user. To avoid this, create the remote_tmp dir with the correct permissions manually"
+                    )
 
-            basefile = "ansible-moduletmp-%s-" % time.time()
+            basefile = f"ansible-moduletmp-{time.time()}-"
             try:
                 tmpdir = tempfile.mkdtemp(prefix=basefile, dir=basedir)
             except (OSError, IOError) as e:
                 self.fail_json(
-                    msg="Failed to create remote module tmp path at dir %s "
-                        "with prefix %s: %s" % (basedir, basefile, to_native(e))
+                    msg=f"Failed to create remote module tmp path at dir {basedir} with prefix {basefile}: {to_native(e)}"
                 )
             if not self._keep_remote_files:
                 atexit.register(shutil.rmtree, tmpdir)
@@ -580,7 +572,7 @@ class AnsibleModule(object):
 
     def warn(self, warning):
         warn(warning)
-        self.log('[WARNING] %s' % warning)
+        self.log(f'[WARNING] {warning}')
 
     def deprecate(self, msg, version=None, date=None, collection_name=None):
         if version is not None and date is not None:
@@ -589,9 +581,9 @@ class AnsibleModule(object):
         # For compatibility, we accept that neither version nor date is set,
         # and treat that the same as if version would haven been set
         if date is not None:
-            self.log('[DEPRECATION WARNING] %s %s' % (msg, date))
+            self.log(f'[DEPRECATION WARNING] {msg} {date}')
         else:
-            self.log('[DEPRECATION WARNING] %s %s' % (msg, version))
+            self.log(f'[DEPRECATION WARNING] {msg} {version}')
 
     def load_file_common_arguments(self, params, path=None):
         '''
@@ -693,7 +685,7 @@ class AnsibleModule(object):
             ret = selinux.lgetfilecon_raw(to_native(path, errors='surrogate_or_strict'))
         except OSError as e:
             if e.errno == errno.ENOENT:
-                self.fail_json(path=path, msg='path %s does not exist' % path)
+                self.fail_json(path=path, msg=f'path {path} does not exist')
             else:
                 self.fail_json(path=path, msg='failed to retrieve selinux context')
         if ret[0] == -1:
@@ -732,9 +724,8 @@ class AnsibleModule(object):
         NFS or other 'special' fs  mount point, otherwise the return will be (False, None).
         """
         try:
-            f = open('/proc/mounts', 'r')
-            mount_data = f.readlines()
-            f.close()
+            with open('/proc/mounts', 'r') as f:
+                mount_data = f.readlines()
         except Exception:
             return (False, None)
 
@@ -794,8 +785,13 @@ class AnsibleModule(object):
                     return True
                 rc = selinux.lsetfilecon(to_native(path), ':'.join(new_context))
             except OSError as e:
-                self.fail_json(path=path, msg='invalid selinux context: %s' % to_native(e),
-                               new_context=new_context, cur_context=cur_context, input_was=context)
+                self.fail_json(
+                    path=path,
+                    msg=f'invalid selinux context: {to_native(e)}',
+                    new_context=new_context,
+                    cur_context=cur_context,
+                    input_was=context,
+                )
             if rc != 0:
                 self.fail_json(path=path, msg='set selinux context failed')
             changed = True
@@ -821,7 +817,7 @@ class AnsibleModule(object):
                 uid = pwd.getpwnam(owner).pw_uid
             except KeyError:
                 path = to_text(b_path)
-                self.fail_json(path=path, msg='chown failed: failed to look up user %s' % owner)
+                self.fail_json(path=path, msg=f'chown failed: failed to look up user {owner}')
 
         if orig_uid != uid:
             if diff is not None:
@@ -838,7 +834,7 @@ class AnsibleModule(object):
                 os.lchown(b_path, uid, -1)
             except (IOError, OSError) as e:
                 path = to_text(b_path)
-                self.fail_json(path=path, msg='chown failed: %s' % (to_text(e)))
+                self.fail_json(path=path, msg=f'chown failed: {to_text(e)}')
             changed = True
         return changed
 
@@ -862,7 +858,7 @@ class AnsibleModule(object):
                 gid = grp.getgrnam(group).gr_gid
             except KeyError:
                 path = to_text(b_path)
-                self.fail_json(path=path, msg='chgrp failed: failed to look up group %s' % group)
+                self.fail_json(path=path, msg=f'chgrp failed: failed to look up group {group}')
 
         if orig_gid != gid:
             if diff is not None:
@@ -933,18 +929,17 @@ class AnsibleModule(object):
             try:
                 if hasattr(os, 'lchmod'):
                     os.lchmod(b_path, mode)
+                elif os.path.islink(b_path):
+                    # Attempt to set the perms of the symlink but be
+                    # careful not to change the perms of the underlying
+                    # file while trying
+                    underlying_stat = os.stat(b_path)
+                    os.chmod(b_path, mode)
+                    new_underlying_stat = os.stat(b_path)
+                    if underlying_stat.st_mode != new_underlying_stat.st_mode:
+                        os.chmod(b_path, stat.S_IMODE(underlying_stat.st_mode))
                 else:
-                    if not os.path.islink(b_path):
-                        os.chmod(b_path, mode)
-                    else:
-                        # Attempt to set the perms of the symlink but be
-                        # careful not to change the perms of the underlying
-                        # file while trying
-                        underlying_stat = os.stat(b_path)
-                        os.chmod(b_path, mode)
-                        new_underlying_stat = os.stat(b_path)
-                        if underlying_stat.st_mode != new_underlying_stat.st_mode:
-                            os.chmod(b_path, stat.S_IMODE(underlying_stat.st_mode))
+                    os.chmod(b_path, mode)
             except OSError as e:
                 if os.path.islink(b_path) and e.errno in (
                     errno.EACCES,  # can't access symlink in sticky directory (stat)
@@ -952,9 +947,7 @@ class AnsibleModule(object):
                     errno.EROFS,  # can't set mode on read-only filesystem
                 ):
                     pass
-                elif e.errno in (errno.ENOENT, errno.ELOOP):  # Can't set mode on broken symbolic links
-                    pass
-                else:
+                elif e.errno not in (errno.ENOENT, errno.ELOOP):
                     raise
             except Exception as e:
                 path = to_text(b_path)
@@ -988,9 +981,8 @@ class AnsibleModule(object):
             attributes = attributes[1:]
 
         if existing.get('attr_flags', '') != attributes or attr_mod == '-':
-            attrcmd = self.get_bin_path('chattr')
-            if attrcmd:
-                attrcmd = [attrcmd, '%s%s' % (attr_mod, attributes), b_path]
+            if attrcmd := self.get_bin_path('chattr'):
+                attrcmd = [attrcmd, f'{attr_mod}{attributes}', b_path]
                 changed = True
 
                 if diff is not None:
@@ -999,13 +991,13 @@ class AnsibleModule(object):
                     diff['before']['attributes'] = existing.get('attr_flags')
                     if 'after' not in diff:
                         diff['after'] = {}
-                    diff['after']['attributes'] = '%s%s' % (attr_mod, attributes)
+                    diff['after']['attributes'] = f'{attr_mod}{attributes}'
 
                 if not self.check_mode:
                     try:
                         rc, out, err = self.run_command(attrcmd)
                         if rc != 0 or err:
-                            raise Exception("Error while setting attributes: %s" % (out + err))
+                            raise Exception(f"Error while setting attributes: {out + err}")
                     except Exception as e:
                         self.fail_json(path=to_text(b_path), msg='chattr failed',
                                        details=to_native(e), exception=traceback.format_exc())
@@ -1013,8 +1005,7 @@ class AnsibleModule(object):
 
     def get_file_attributes(self, path, include_version=True):
         output = {}
-        attrcmd = self.get_bin_path('lsattr', False)
-        if attrcmd:
+        if attrcmd := self.get_bin_path('lsattr', False):
             flags = '-vd' if include_version else '-d'
             attrcmd = [attrcmd, flags, path]
             try:
@@ -1055,20 +1046,20 @@ class AnsibleModule(object):
             # An empty user or 'a' means 'all'.
             users = permlist.pop(0)
             use_umask = (users == '')
-            if users == 'a' or users == '':
+            if users in ['a', '']:
                 users = 'ugo'
 
             # Check if there are illegal characters in the user list
             # They can end up in 'users' because they are not split
             if USERS_RE.match(users):
-                raise ValueError("bad symbolic permission for mode: %s" % mode)
+                raise ValueError(f"bad symbolic permission for mode: {mode}")
 
             # Now we have two list of equal length, one contains the requested
             # permissions and one with the corresponding operators.
             for idx, perms in enumerate(permlist):
                 # Check if there are illegal characters in the permissions
                 if PERMS_RE.match(perms):
-                    raise ValueError("bad symbolic permission for mode: %s" % mode)
+                    raise ValueError(f"bad symbolic permission for mode: {mode}")
 
                 for user in users:
                     mode_to_apply = cls._get_octal_mode_from_symbolic_perms(path_stat, user, perms, use_umask)
@@ -1256,8 +1247,10 @@ class AnsibleModule(object):
             os.environ['LC_ALL'] = best_locale
             os.environ['LC_MESSAGES'] = best_locale
         except Exception as e:
-            self.fail_json(msg="An unknown error was encountered while attempting to validate the locale: %s" %
-                           to_native(e), exception=traceback.format_exc())
+            self.fail_json(
+                msg=f"An unknown error was encountered while attempting to validate the locale: {to_native(e)}",
+                exception=traceback.format_exc(),
+            )
 
     def _set_internal_properties(self, argument_spec=None, module_parameters=None):
         if argument_spec is None:
@@ -1267,7 +1260,7 @@ class AnsibleModule(object):
 
         for k in PASS_VARS:
             # handle setting internal properties from internal ansible vars
-            param_key = '_ansible_%s' % k
+            param_key = f'_ansible_{k}'
             if param_key in module_parameters:
                 if k in PASS_BOOLS:
                     setattr(self, PASS_VARS[k][0], self.boolean(module_parameters[param_key]))
@@ -1277,10 +1270,8 @@ class AnsibleModule(object):
                 # clean up internal top level params:
                 if param_key in self.params:
                     del self.params[param_key]
-            else:
-                # use defaults if not already set
-                if not hasattr(self, PASS_VARS[k][0]):
-                    setattr(self, PASS_VARS[k][0], PASS_VARS[k][1])
+            elif not hasattr(self, PASS_VARS[k][0]):
+                setattr(self, PASS_VARS[k][0], PASS_VARS[k][1])
 
     def safe_eval(self, value, locals=None, include_exceptions=False):
         return safe_eval(value, locals, include_exceptions)
@@ -1297,7 +1288,7 @@ class AnsibleModule(object):
     def _log_to_syslog(self, msg):
         if HAS_SYSLOG:
             try:
-                module = 'ansible-%s' % self._name
+                module = f'ansible-{self._name}'
                 facility = getattr(syslog, self._syslog_facility, syslog.LOG_USER)
                 syslog.openlog(str(module), 0, facility)
                 syslog.syslog(syslog.LOG_INFO, msg)
@@ -1312,7 +1303,7 @@ class AnsibleModule(object):
 
     def debug(self, msg):
         if self._debug:
-            self.log('[debug] %s' % msg)
+            self.log(f'[debug] {msg}')
 
     def log(self, msg, log_args=None):
 

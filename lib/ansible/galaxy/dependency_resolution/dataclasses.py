@@ -365,12 +365,14 @@ class _ComputedReqKindsMixin:
 
     @property
     def canonical_package_id(self):
-        if not self.is_virtual:
-            return to_native(self.fqcn)
-
         return (
-            '<virtual namespace from {src!s} of type {src_type!s}>'.
-            format(src=to_native(self.src), src_type=to_native(self.type))
+            (
+                '<virtual namespace from {src!s} of type {src_type!s}>'.format(
+                    src=to_native(self.src), src_type=to_native(self.type)
+                )
+            )
+            if self.is_virtual
+            else to_native(self.fqcn)
         )
 
     @property

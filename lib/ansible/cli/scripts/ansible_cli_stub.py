@@ -41,7 +41,9 @@ _PY3_MIN = sys.version_info[:2] >= (3, 5)
 _PY2_MIN = (2, 6) <= sys.version_info[:2] < (3,)
 _PY_MIN = _PY3_MIN or _PY2_MIN
 if not _PY_MIN:
-    raise SystemExit('ERROR: Ansible requires a minimum of Python2 version 2.6 or Python3 version 3.5. Current version: %s' % ''.join(sys.version.splitlines()))
+    raise SystemExit(
+        f"ERROR: Ansible requires a minimum of Python2 version 2.6 or Python3 version 3.5. Current version: {''.join(sys.version.splitlines())}"
+    )
 
 
 class LastResort(object):
@@ -66,17 +68,14 @@ if __name__ == '__main__':
 
     initialize_locale()
 
-    cli = None
     me = os.path.basename(sys.argv[0])
 
+    cli = None
     try:
         display = Display()
         if C.CONTROLLER_PYTHON_WARNING and not _PY38_MIN:
             display.deprecated(
-                (
-                    'Ansible will require Python 3.8 or newer on the controller starting with Ansible 2.12. '
-                    'Current version: %s' % ''.join(sys.version.splitlines())
-                ),
+                f"Ansible will require Python 3.8 or newer on the controller starting with Ansible 2.12. Current version: {''.join(sys.version.splitlines())}",
                 version='2.12',
                 collection_name='ansible.builtin',
             )
@@ -91,23 +90,20 @@ if __name__ == '__main__':
 
         if len(target) > 1:
             sub = target[1]
-            myclass = "%sCLI" % sub.capitalize()
+            myclass = f"{sub.capitalize()}CLI"
         elif target[0] == 'ansible':
             sub = 'adhoc'
             myclass = 'AdHocCLI'
         else:
-            raise AnsibleError("Unknown Ansible alias: %s" % me)
+            raise AnsibleError(f"Unknown Ansible alias: {me}")
 
         try:
-            mycli = getattr(__import__("ansible.cli.%s" % sub, fromlist=[myclass]), myclass)
+            mycli = getattr(__import__(f"ansible.cli.{sub}", fromlist=[myclass]), myclass)
         except ImportError as e:
             # ImportError members have changed in py3
-            if 'msg' in dir(e):
-                msg = e.msg
-            else:
-                msg = e.message
-            if msg.endswith(' %s' % sub):
-                raise AnsibleError("Ansible sub-program not implemented: %s" % me)
+            msg = e.msg if 'msg' in dir(e) else e.message
+            if msg.endswith(f' {sub}'):
+                raise AnsibleError(f"Ansible sub-program not implemented: {me}")
             else:
                 raise
 
@@ -139,13 +135,6 @@ if __name__ == '__main__':
     except AnsibleParserError as e:
         display.error(to_text(e), wrap_text=False)
         exit_code = 4
-# TQM takes care of these, but leaving comment to reserve the exit codes
-#    except AnsibleHostUnreachable as e:
-#        display.error(str(e))
-#        exit_code = 3
-#    except AnsibleHostFailed as e:
-#        display.error(str(e))
-#        exit_code = 2
     except AnsibleError as e:
         display.error(to_text(e), wrap_text=False)
         exit_code = 1
@@ -158,8 +147,11 @@ if __name__ == '__main__':
             # enter post mortem mode.
             raise
         have_cli_options = bool(context.CLIARGS)
-        display.error("Unexpected Exception, this is probably a bug: %s" % to_text(e), wrap_text=False)
-        if not have_cli_options or have_cli_options and context.CLIARGS['verbosity'] > 2:
+        display.error(
+            f"Unexpected Exception, this is probably a bug: {to_text(e)}",
+            wrap_text=False,
+        )
+        if not have_cli_options or context.CLIARGS['verbosity'] > 2:
             log_only = False
             if hasattr(e, 'orig_exc'):
                 display.vvv('\nexception type: %s' % to_text(type(e.orig_exc)))

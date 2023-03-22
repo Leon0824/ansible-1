@@ -38,10 +38,7 @@ class TaskResult:
         else:
             self._result = DataLoader().load(return_data)
 
-        if task_fields is None:
-            self._task_fields = dict()
-        else:
-            self._task_fields = task_fields
+        self._task_fields = {} if task_fields is None else task_fields
 
     @property
     def task_name(self):
@@ -98,12 +95,11 @@ class TaskResult:
 
         if isinstance(self._result, dict) and key in self._result:
             return self._result.get(key, False)
-        else:
-            flag = False
-            for res in self._result.get('results', []):
-                if isinstance(res, dict):
-                    flag |= res.get(key, False)
-            return flag
+        flag = False
+        for res in self._result.get('results', []):
+            if isinstance(res, dict):
+                flag |= res.get(key, False)
+        return flag
 
     def clean_copy(self):
 

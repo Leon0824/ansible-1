@@ -24,17 +24,13 @@ except ImportError:
 def build_lib_path(this_script=__file__):
     """Return path to the common build library directory."""
     hacking_dir = os.path.dirname(this_script)
-    libdir = os.path.abspath(os.path.join(hacking_dir, 'build_library'))
-
-    return libdir
+    return os.path.abspath(os.path.join(hacking_dir, 'build_library'))
 
 
 def ansible_lib_path(this_script=__file__):
     """Return path to the common build library directory."""
     hacking_dir = os.path.dirname(this_script)
-    libdir = os.path.abspath(os.path.join(hacking_dir, '..', 'lib'))
-
-    return libdir
+    return os.path.abspath(os.path.join(hacking_dir, '..', 'lib'))
 
 
 sys.path.insert(0, ansible_lib_path())
@@ -50,9 +46,9 @@ def create_arg_parser(program_name):
 
     :arg program_name: The name of the script.  Used in help texts
     """
-    parser = argparse.ArgumentParser(prog=program_name,
-                                     description="Implements utilities to build Ansible")
-    return parser
+    return argparse.ArgumentParser(
+        prog=program_name, description="Implements utilities to build Ansible"
+    )
 
 
 def main():

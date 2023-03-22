@@ -34,14 +34,12 @@ def trim_docstring(docstring):
     # Determine minimum indentation (first line doesn't count):
     indent = sys.maxsize
     for line in lines[1:]:
-        stripped = line.lstrip()
-        if stripped:
+        if stripped := line.lstrip():
             indent = min(indent, len(line) - len(stripped))
     # Remove indentation (first line is special):
     trimmed = [lines[0].strip()]
     if indent < sys.maxsize:
-        for line in lines[1:]:
-            trimmed.append(line[indent:].rstrip())
+        trimmed.extend(line[indent:].rstrip() for line in lines[1:])
     # Strip off trailing and leading blank lines:
     while trimmed and not trimmed[-1]:
         trimmed.pop()
@@ -72,11 +70,7 @@ def get_options(optlist):
 def dedupe_groups(parser):
     action_groups = []
     for action_group in parser._action_groups:
-        found = False
-        for a in action_groups:
-            if a._actions == action_group._actions:
-                found = True
-                break
+        found = any(a._actions == action_group._actions for a in action_groups)
         if not found:
             action_groups.append(action_group)
     return action_groups
@@ -85,10 +79,11 @@ def dedupe_groups(parser):
 def get_option_groups(option_parser):
     groups = []
     for action_group in dedupe_groups(option_parser)[1:]:
-        group_info = {}
-        group_info['desc'] = action_group.description
-        group_info['options'] = action_group._actions
-        group_info['group_obj'] = action_group
+        group_info = {
+            'desc': action_group.description,
+            'options': action_group._actions,
+            'group_obj': action_group,
+        }
         groups.append(group_info)
     return groups
 
@@ -109,15 +104,19 @@ def opt_doc_list(parser):
 def opts_docs(cli_class_name, cli_module_name):
     ''' generate doc structure from options '''
 
-    cli_name = 'ansible-%s' % cli_module_name
+    cli_name = f'ansible-{cli_module_name}'
     if cli_module_name == 'adhoc':
         cli_name = 'ansible'
 
     # WIth no action/subcommand
     # shared opts set
     # instantiate each cli and ask its options
-    cli_klass = getattr(__import__("ansible.cli.%s" % cli_module_name,
-                                   fromlist=[cli_class_name]), cli_class_name)
+    cli_klass = getattr(
+        __import__(
+            f"ansible.cli.{cli_module_name}", fromlist=[cli_class_name]
+        ),
+        cli_class_name,
+    )
     cli = cli_klass([cli_name])
 
     # parse the common options
@@ -176,7 +175,7 @@ def opts_docs(cli_class_name, cli_module_name):
             # docs['actions'][action] = {}
             # docs['actions'][action]['name'] = action
             action_info['name'] = action
-            action_info['desc'] = trim_docstring(getattr(cli, 'execute_%s' % action).__doc__)
+            action_info['desc'] = trim_docstring(getattr(cli, f'execute_{action}').__doc__)
 
             # docs['actions'][action]['desc'] = getattr(cli, 'execute_%s' % action).__doc__.strip()
             action_doc_list = opt_doc_list(parser)
@@ -271,9 +270,9 @@ class GenerateMan(Command):
                 cli_bin_name = 'ansible'
             else:
                 # myclass = "%sCLI" % libname.capitalize()
-                cli_class_name = "%sCLI" % cli_name.capitalize()
-                output[cli_name] = 'ansible-%s.1.rst.in' % cli_name
-                cli_bin_name = 'ansible-%s' % cli_name
+                cli_class_name = f"{cli_name.capitalize()}CLI"
+                output[cli_name] = f'ansible-{cli_name}.1.rst.in'
+                cli_bin_name = f'ansible-{cli_name}'
 
             # FIXME:
             allvars[cli_name] = opts_docs(cli_class_name, cli_name)

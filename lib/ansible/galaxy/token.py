@@ -57,7 +57,7 @@ class KeycloakToken(object):
         self.validate_certs = validate_certs
 
     def _form_payload(self):
-        return 'grant_type=refresh_token&client_id=cloud-services&refresh_token=%s' % self.access_token
+        return f'grant_type=refresh_token&client_id=cloud-services&refresh_token={self.access_token}'
 
     def get(self):
         if self._token:
@@ -89,9 +89,7 @@ class KeycloakToken(object):
         return self._token
 
     def headers(self):
-        headers = {}
-        headers['Authorization'] = '%s %s' % (self.token_type, self.get())
-        return headers
+        return {'Authorization': f'{self.token_type} {self.get()}'}
 
 
 class GalaxyToken(object):
@@ -127,10 +125,12 @@ class GalaxyToken(object):
         with open(self.b_file, 'r') as f:
             config = yaml_load(f)
 
-        display.vvv('%s %s' % (action, to_text(self.b_file)))
+        display.vvv(f'{action} {to_text(self.b_file)}')
 
         if config and not isinstance(config, dict):
-            display.vvv('Galaxy token file %s malformed, unable to read it' % to_text(self.b_file))
+            display.vvv(
+                f'Galaxy token file {to_text(self.b_file)} malformed, unable to read it'
+            )
             return {}
 
         return config or {}
@@ -148,9 +148,8 @@ class GalaxyToken(object):
 
     def headers(self):
         headers = {}
-        token = self.get()
-        if token:
-            headers['Authorization'] = '%s %s' % (self.token_type, self.get())
+        if token := self.get():
+            headers['Authorization'] = f'{self.token_type} {self.get()}'
         return headers
 
 
@@ -178,6 +177,4 @@ class BasicAuthToken(object):
         return self._token
 
     def headers(self):
-        headers = {}
-        headers['Authorization'] = '%s %s' % (self.token_type, self.get())
-        return headers
+        return {'Authorization': f'{self.token_type} {self.get()}'}

@@ -23,10 +23,7 @@ class VersionStr(UserString):
 
 
 def transform_args(args):
-    # Make it possible to sort versions in the jinja2 templates
-    new_versions = []
-    for version in args.versions:
-        new_versions.append(VersionStr(version))
+    new_versions = [VersionStr(version) for version in args.versions]
     args.versions = new_versions
 
     return args

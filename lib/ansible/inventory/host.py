@@ -38,9 +38,7 @@ class Host:
         return self.deserialize(data)
 
     def __eq__(self, other):
-        if not isinstance(other, Host):
-            return False
-        return self._uuid == other._uuid
+        return self._uuid == other._uuid if isinstance(other, Host) else False
 
     def __ne__(self, other):
         return not self.__eq__(other)
@@ -55,10 +53,7 @@ class Host:
         return self.get_name()
 
     def serialize(self):
-        groups = []
-        for group in self.groups:
-            groups.append(group.serialize())
-
+        groups = [group.serialize() for group in self.groups]
         return dict(
             name=self.name,
             vars=self.vars.copy(),
@@ -72,7 +67,7 @@ class Host:
         self.__init__(gen_uuid=False)
 
         self.name = data.get('name')
-        self.vars = data.get('vars', dict())
+        self.vars = data.get('vars', {})
         self.address = data.get('address', '')
         self._uuid = data.get('uuid', None)
         self.implicit = data.get('implicit', False)
@@ -151,9 +146,10 @@ class Host:
         return self.groups
 
     def get_magic_vars(self):
-        results = {}
-        results['inventory_hostname'] = self.name
-        results['inventory_hostname_short'] = self.name.split('.')[0]
+        results = {
+            'inventory_hostname': self.name,
+            'inventory_hostname_short': self.name.split('.')[0],
+        }
         results['group_names'] = sorted([g.name for g in self.get_groups() if g.name != 'all'])
 
         return results
